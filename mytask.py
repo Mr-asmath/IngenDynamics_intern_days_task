@@ -3,6 +3,7 @@ import sqlite3
 from datetime import date, timedelta, datetime
 import pandas as pd
 import io
+import csv
 
 # ---------------- CONFIG ----------------
 TOTAL_DAYS = 548
@@ -254,27 +255,38 @@ def get_tasks_for_download(start_date):
     
     return df
 
-def create_download_data(df):
-    # Create Excel file
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Internship Tasks')
-        worksheet = writer.sheets['Internship Tasks']
+def create_csv_download(df):
+    """Create CSV file for download"""
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    return output.getvalue().encode('utf-8')
+
+def create_excel_download(df):
+    """Create Excel file for download (if openpyxl is available)"""
+    try:
+        # Try to import openpyxl
+        import openpyxl
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Internship Tasks')
+            worksheet = writer.sheets['Internship Tasks']
+            
+            # Adjust column widths
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
         
-        # Adjust column widths
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            worksheet.column_dimensions[column_letter].width = adjusted_width
-    
-    return output.getvalue()
+        return output.getvalue(), True
+    except ImportError:
+        return None, False
 
 # ---------------- LOGIN ----------------
 def login():
@@ -417,6 +429,9 @@ def dashboard():
         key="task_date_input"
     )
     
+    # Update session state
+    st.session_state.selected_date = task_date
+    
     # Check if date already has a task
     existing_task = check_date_exists(task_date)
     
@@ -490,16 +505,36 @@ def dashboard():
             df = get_tasks_for_download(start_date)
             
             if df is not None and not df.empty:
-                # Create download button
-                excel_data = create_download_data(df)
+                # Create download buttons
+                col_csv, col_excel = st.columns(2)
                 
-                st.download_button(
-                    label="📥 Download Excel",
-                    data=excel_data,
-                    file_name=f"internship_tasks_{date.today().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                with col_csv:
+                    # CSV Download
+                    csv_data = create_csv_download(df)
+                    st.download_button(
+                        label="📥 CSV",
+                        data=csv_data,
+                        file_name=f"internship_tasks_{date.today().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="csv_download"
+                    )
+                
+                with col_excel:
+                    # Excel Download (if available)
+                    excel_data, excel_available = create_excel_download(df)
+                    if excel_available and excel_data:
+                        st.download_button(
+                            label="📊 Excel",
+                            data=excel_data,
+                            file_name=f"internship_tasks_{date.today().strftime('%Y%m%d')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="excel_download"
+                        )
+                    else:
+                        # Show disabled button or info
+                        st.info("Excel export requires openpyxl package")
             else:
                 st.warning("No tasks to download")
         else:
@@ -565,47 +600,50 @@ def dashboard():
                     day_number = f"Day {day_num} • "
             
             # Display each task in a card
-            st.markdown(f"""
-            <div class="task-card">
-                <div style="display: flex; justify-content: space-between; align-items: start;">
-                    <div style="flex-grow: 1;">
+            with st.container():
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"""
+                    <div class="task-card">
                         <div style="color: #666; font-size: 0.9em; margin-bottom: 4px;">
                             {day_number}📅 {task_date_str}
                         </div>
                         <p style="margin: 0; line-height: 1.5;">{task_text}</p>
                     </div>
-                    <div style="display: flex; gap: 5px; flex-shrink: 0;">
-                        <button style="background: #4CAF50; color: white; border: none; 
-                                     padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.9em;"
-                                onclick="window.location.href='?date={task_date_str}'">
-                            ✏️ Edit
-                        </button>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    # Edit button
+                    if st.button("✏️ Edit", key=f"edit_btn_{task_id}", use_container_width=True):
+                        st.session_state.selected_date = task_date_display
+                        st.session_state[f"edit_{task_id}"] = True
+                        st.rerun()
             
-            # Quick edit option
-            with st.expander(f"Quick Edit - {task_date_str}", expanded=False):
-                with st.form(key=f"edit_form_{task_id}"):
-                    new_task = st.text_area("Edit Task", value=task_text, height=100, key=f"edit_{task_id}")
-                    col_save_edit, col_cancel, col_delete = st.columns([2, 1, 1])
-                    
-                    with col_save_edit:
-                        if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                            update_task(task_id, new_task)
-                            st.success("Task updated successfully!")
-                            st.rerun()
-                    
-                    with col_cancel:
-                        if st.form_submit_button("❌ Cancel", use_container_width=True):
-                            st.rerun()
-                    
-                    with col_delete:
-                        if st.form_submit_button("🗑️ Delete", use_container_width=True, type="secondary"):
-                            delete_task(task_id)
-                            st.success("Task deleted successfully!")
-                            st.rerun()
+            # Edit form (show if edit button was clicked)
+            if st.session_state.get(f"edit_{task_id}", False):
+                with st.expander(f"Edit Task - {task_date_str}", expanded=True):
+                    with st.form(key=f"edit_form_{task_id}"):
+                        new_task = st.text_area("Edit Task", value=task_text, height=100, key=f"edit_text_{task_id}")
+                        col_save_edit, col_cancel, col_delete = st.columns([2, 1, 1])
+                        
+                        with col_save_edit:
+                            if st.form_submit_button("💾 Save", use_container_width=True):
+                                update_task(task_id, new_task)
+                                st.session_state.pop(f"edit_{task_id}", None)
+                                st.success("Task updated successfully!")
+                                st.rerun()
+                        
+                        with col_cancel:
+                            if st.form_submit_button("❌ Cancel", use_container_width=True):
+                                st.session_state.pop(f"edit_{task_id}", None)
+                                st.rerun()
+                        
+                        with col_delete:
+                            if st.form_submit_button("🗑️ Delete", use_container_width=True, type="secondary"):
+                                delete_task(task_id)
+                                st.session_state.pop(f"edit_{task_id}", None)
+                                st.success("Task deleted successfully!")
+                                st.rerun()
     else:
         st.info("📭 No tasks found. Add your first task above!")
     
@@ -646,6 +684,10 @@ def dashboard():
             st.session_state.pop('username', None)
             st.session_state.pop('selected_date', None)
             st.session_state.pop('filter_date', None)
+            # Clear all edit states
+            for key in list(st.session_state.keys()):
+                if key.startswith('edit_'):
+                    st.session_state.pop(key, None)
             st.rerun()
 
 # ---------------- MAIN ----------------
@@ -679,10 +721,7 @@ if __name__ == "__main__":
     if "date" in query_params:
         try:
             selected_date = date.fromisoformat(query_params["date"])
-            if 'selected_date' not in st.session_state:
-                st.session_state.selected_date = selected_date
-            else:
-                st.session_state.selected_date = selected_date
+            st.session_state.selected_date = selected_date
             st.query_params.clear()
         except ValueError:
             pass
