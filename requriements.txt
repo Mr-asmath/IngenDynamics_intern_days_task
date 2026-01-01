@@ -1,5 +1,6 @@
 streamlit>=1.28.0
 pandas>=2.0.0
+psycopg2-binary>=2.9.9
 pymongo[srv]
 dnspython>=2.4.0
 openpyxl>=3.1.0
