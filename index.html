@@ -4,9 +4,865 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Internship Tracker</title>
-    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        #app {
+            min-height: 100vh;
+        }
+
+        .screen {
+            display: none;
+            min-height: 100vh;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        /* Common Components */
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #4CAF50;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .btn-success {
+            background: linear-gradient(45deg, #4CAF50, #2E7D32);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #555;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .fixed-date-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .fixed-date-display input[readonly] {
+            background-color: #f5f5f5;
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        .fixed-date-label {
+            color: #4CAF50;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        /* Login Screen */
+        .login-container {
+            max-width: 500px;
+            margin: 50px auto;
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .login-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .login-header h1 {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .db-status {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-local {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .login-form {
+            padding: 40px;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            margin: 30px 0;
+        }
+
+        .login-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #2196F3;
+            text-align: center;
+        }
+
+        .login-info h3 {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        /* Dashboard Header */
+        .dashboard-header {
+            background: white;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .header-left h1 {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #333;
+        }
+
+        .user-info {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .role-badge {
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .role-admin {
+            background: #2196F3;
+            color: white;
+        }
+
+        .role-viewer {
+            background: #FF9800;
+            color: white;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-display {
+            text-align: right;
+        }
+
+        .user-display i {
+            font-size: 24px;
+            color: #666;
+            margin-right: 10px;
+        }
+
+        .user-display span {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .user-display small {
+            display: block;
+            color: #666;
+            font-size: 12px;
+        }
+
+        /* Dashboard Content */
+        .dashboard-content {
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Progress Section */
+        .progress-section {
+            border-left-color: #2196F3;
+        }
+
+        .progress-bar-container {
+            position: relative;
+            margin: 30px 0;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #2E7D32);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        .progress-text {
+            position: absolute;
+            right: 0;
+            top: -25px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+        }
+
+        .metric-content h3 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .metric-content p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Task Entry */
+        .task-entry-section {
+            border-left-color: #FF9800;
+        }
+
+        .date-navigation {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .date-navigation .btn {
+            flex: 1;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .warning-box i {
+            font-size: 20px;
+        }
+
+        .warning-box strong {
+            font-weight: 600;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        /* Export Section */
+        .export-section {
+            border-left-color: #9C27B0;
+        }
+
+        .export-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        /* Task History */
+        .task-history-section {
+            border-left-color: #009688;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            color: #1565c0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .filter-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+        }
+
+        #limit-value {
+            min-width: 30px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .tasks-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .task-item {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            transition: all 0.3s ease;
+            border-left: 4px solid #2196F3;
+        }
+
+        .task-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border-color: #2196F3;
+        }
+
+        .task-content {
+            flex: 1;
+        }
+
+        .task-date {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .task-text {
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .task-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .task-actions .btn {
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+            display: none;
+        }
+
+        .empty-state.active {
+            display: block;
+        }
+
+        .empty-state i {
+            font-size: 60px;
+            margin-bottom: 20px;
+            color: #ddd;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        /* Statistics */
+        .statistics-section {
+            border-left-color: #795548;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .stat-card {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .stat-card h3 {
+            font-size: 36px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .stat-card p {
+            color: #666;
+            font-size: 16px;
+        }
+
+        /* Database Management */
+        .db-management-section {
+            border-left-color: #607D8B;
+        }
+
+        .db-actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        /* Report Dashboard */
+        .report-header-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+
+        .report-header h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .report-header p {
+            opacity: 0.9;
+        }
+
+        .report-task-item {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 2px solid #e0e0e0;
+            border-left: 5px solid #4CAF50;
+        }
+
+        .report-task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .day-badge {
+            background: #4CAF50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .report-task-date {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .report-task-content {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 3px solid #2196F3;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .modal-body {
+            padding: 30px;
+            overflow-y: auto;
+            max-height: 60vh;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            background: #f8f9fa;
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+        }
+
+        .info-grid {
+            display: grid;
+            gap: 15px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #2196F3;
+        }
+
+        .info-label {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .info-value {
+            color: #666;
+        }
+
+        .status-good {
+            color: #4CAF50;
+            font-weight: 500;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: none;
+            align-items: center;
+            gap: 15px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.active {
+            display: flex;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast-icon {
+            font-size: 24px;
+        }
+
+        .toast.success .toast-icon {
+            color: #4CAF50;
+        }
+
+        .toast.error .toast-icon {
+            color: #f44336;
+        }
+
+        .toast.warning .toast-icon {
+            color: #FF9800;
+        }
+
+        .toast.info .toast-icon {
+            color: #2196F3;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .dashboard-header {
+                flex-direction: column;
+                gap: 20px;
+                padding: 20px;
+            }
+            
+            .header-right {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .dashboard-content {
+                padding: 20px;
+            }
+            
+            .card {
+                padding: 20px;
+            }
+            
+            .metrics-grid,
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons,
+            .db-actions {
+                flex-direction: column;
+            }
+            
+            .export-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .filter-controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 20px;
+            }
+            
+            .modal-footer {
+                flex-direction: column;
+            }
+            
+            .date-navigation {
+                flex-direction: column;
+            }
+            
+            .export-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div id="app">
@@ -14,38 +870,35 @@
         <div id="login-screen" class="screen active">
             <div class="login-container">
                 <div class="login-header">
-                    <h1><i class="fas fa-lock"></i> Login</h1>
+                    <h1><i class="fas fa-lock"></i> Internship Tracker</h1>
                     <div class="db-status">
-                        <span class="status-badge status-local"><i class="fas fa-database"></i> IndexedDB</span>
+                        <span class="status-badge status-local"><i class="fas fa-database"></i> Local Storage</span>
                     </div>
                 </div>
                 
                 <div class="login-form">
                     <div class="form-group">
                         <label for="username"><i class="fas fa-user"></i> Username</label>
-                        <input type="text" id="username" placeholder="Enter username">
+                        <input type="text" id="username" placeholder="Enter your username">
                     </div>
                     
                     <div class="form-group">
                         <label for="password"><i class="fas fa-key"></i> Password</label>
-                        <input type="password" id="password" placeholder="Enter password">
+                        <input type="password" id="password" placeholder="Enter your password">
                     </div>
                     
                     <div class="form-actions">
                         <button id="login-btn" class="btn btn-primary">
-                            <i class="fas fa-rocket"></i> Login
+                            <i class="fas fa-sign-in-alt"></i> Login
                         </button>
                         <button id="clear-btn" class="btn btn-secondary">
-                            <i class="fas fa-redo"></i> Clear
+                            <i class="fas fa-times"></i> Clear
                         </button>
                     </div>
                     
                     <div class="login-info">
-                        <h3><i class="fas fa-info-circle"></i> Available Users:</h3>
-                        <ul>
-                            <li><strong>admin</strong> (password: admin@asmath) - Full access</li>
-                            <li><strong>admin2</strong> (password: admin@AHBETA) - Report view only</li>
-                        </ul>
+                        <h3><i class="fas fa-info-circle"></i> Secure Login</h3>
+                        <p>Enter your credentials to access the internship tracker system.</p>
                     </div>
                 </div>
             </div>
@@ -58,7 +911,7 @@
                     <h1><i class="fas fa-calendar-alt"></i> Internship Tracker</h1>
                     <div class="user-info">
                         <span class="role-badge role-admin"><i class="fas fa-user-shield"></i> Administrator</span>
-                        <span class="db-status"><i class="fas fa-database"></i> IndexedDB</span>
+                        <span class="status-badge status-local"><i class="fas fa-database"></i> Local Storage</span>
                     </div>
                 </div>
                 <div class="header-right">
@@ -79,13 +932,16 @@
                     <h2><i class="fas fa-cog"></i> Settings</h2>
                     <div class="form-group">
                         <label for="start-date"><i class="fas fa-calendar-day"></i> Internship Start Date</label>
-                        <input type="date" id="start-date">
-                        <small>Set the start date of your internship</small>
+                        <div class="fixed-date-display">
+                            <input type="date" id="start-date" value="2025-12-22" readonly>
+                            <span class="fixed-date-label">(Fixed: December 22, 2025)</span>
+                        </div>
+                        <small>Start date is fixed and cannot be changed</small>
                     </div>
-                    <button id="save-date" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Date
-                    </button>
-                    <div id="date-info" class="info-box"></div>
+                    <div id="date-info" class="info-box">
+                        <i class="fas fa-info-circle"></i>
+                        Fixed start date: December 22, 2025
+                    </div>
                 </section>
 
                 <!-- Progress Overview -->
@@ -152,10 +1008,12 @@
                         <input type="date" id="task-date">
                     </div>
                     
-                    <div id="date-warning" class="warning-box" style="display: none;">
+                    <div id="date-warning" class="warning-box">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <strong>Date already has a task!</strong>
-                        Updating will replace the existing task.
+                        <div>
+                            <strong>Date already has a task!</strong><br>
+                            <span id="warning-date"></span> already has a task. Updating will replace it.
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -180,13 +1038,13 @@
                 <section class="card export-section">
                     <h2><i class="fas fa-download"></i> Export Data</h2>
                     <div class="export-content">
-                        <p>Export all tasks with calculated day numbers based on your start date.</p>
+                        <p>Export all tasks with calculated day numbers based on start date.</p>
                         <div class="export-buttons">
                             <button id="export-csv" class="btn btn-success">
-                                <i class="fas fa-file-csv"></i> CSV Report
+                                <i class="fas fa-file-csv"></i> Export CSV
                             </button>
                             <button id="export-json" class="btn btn-success">
-                                <i class="fas fa-file-code"></i> JSON Report
+                                <i class="fas fa-file-code"></i> Export JSON
                             </button>
                         </div>
                     </div>
@@ -196,11 +1054,6 @@
                 <section class="card task-history-section">
                     <h2><i class="fas fa-history"></i> Task History</h2>
                     
-                    <div class="info-box">
-                        <i class="fas fa-lightbulb"></i>
-                        <strong>Tip:</strong> Use 'admin2' account (password: admin@AHBETA) to view reports in day order.
-                    </div>
-                    
                     <div class="filter-controls">
                         <div class="form-group">
                             <label for="filter-date"><i class="fas fa-filter"></i> Filter by Date</label>
@@ -209,8 +1062,10 @@
                         
                         <div class="form-group">
                             <label for="task-limit"><i class="fas fa-list-ol"></i> Show tasks</label>
-                            <input type="range" id="task-limit" min="5" max="100" value="20">
-                            <span id="limit-value">20</span>
+                            <div class="slider-container">
+                                <input type="range" id="task-limit" min="5" max="100" value="20">
+                                <span id="limit-value">20</span>
+                            </div>
                         </div>
                         
                         <button id="clear-filter" class="btn btn-secondary">
@@ -260,9 +1115,6 @@
                         <button id="db-info" class="btn btn-secondary">
                             <i class="fas fa-info-circle"></i> Database Info
                         </button>
-                        <button id="backup-db" class="btn btn-secondary">
-                            <i class="fas fa-download"></i> Backup Database
-                        </button>
                     </div>
                 </section>
             </div>
@@ -275,7 +1127,7 @@
                     <h1><i class="fas fa-chart-bar"></i> Internship Reports</h1>
                     <div class="user-info">
                         <span class="role-badge role-viewer"><i class="fas fa-eye"></i> Report Viewer</span>
-                        <span class="db-status"><i class="fas fa-database"></i> IndexedDB</span>
+                        <span class="status-badge status-local"><i class="fas fa-database"></i> Local Storage</span>
                     </div>
                 </div>
                 <div class="header-right">
@@ -310,7 +1162,7 @@
                 <section class="card report-header-section">
                     <div class="report-header">
                         <h3><i class="fas fa-file-alt"></i> Internship Progress Report</h3>
-                        <p id="report-start-date">Start Date: Not set</p>
+                        <p id="report-start-date">Start Date: December 22, 2025</p>
                     </div>
                 </section>
 
@@ -319,17 +1171,6 @@
                     <h2><i class="fas fa-calendar"></i> Daily Tasks (Sorted by Day Number)</h2>
                     
                     <div class="filter-controls">
-                        <div class="form-group">
-                            <label for="day-range"><i class="fas fa-sliders-h"></i> Select Day Range</label>
-                            <div class="range-slider">
-                                <input type="range" id="day-range-min" min="1" max="100" value="1">
-                                <input type="range" id="day-range-max" min="1" max="100" value="100">
-                            </div>
-                            <div class="range-values">
-                                <span id="range-min">Day 1</span> to <span id="range-max">Day 100</span>
-                            </div>
-                        </div>
-                        
                         <div class="form-group">
                             <label for="search-tasks"><i class="fas fa-search"></i> Search in tasks</label>
                             <input type="text" id="search-tasks" placeholder="Type to search...">
@@ -351,13 +1192,13 @@
                 <section class="card report-export-section">
                     <h2><i class="fas fa-download"></i> Download Reports</h2>
                     <div class="export-content">
-                        <p>Download your internship reports in various formats.</p>
+                        <p>Download your internship reports with correct day numbers.</p>
                         <div class="export-buttons">
                             <button id="export-report-csv" class="btn btn-success">
-                                <i class="fas fa-file-csv"></i> CSV Report
+                                <i class="fas fa-file-csv"></i> Download CSV
                             </button>
                             <button id="export-report-json" class="btn btn-success">
-                                <i class="fas fa-file-code"></i> JSON Report
+                                <i class="fas fa-file-code"></i> Download JSON
                             </button>
                         </div>
                     </div>
@@ -408,7 +1249,7 @@
                 <div class="info-grid">
                     <div class="info-item">
                         <span class="info-label">Database Type:</span>
-                        <span class="info-value">IndexedDB</span>
+                        <span class="info-value">Local Storage</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Total Users:</span>
@@ -423,8 +1264,8 @@
                         <span class="info-value" id="info-active-days">0</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Storage Status:</span>
-                        <span class="info-value status-good">Operational</span>
+                        <span class="info-label">Start Date:</span>
+                        <span class="info-value">December 22, 2025</span>
                     </div>
                 </div>
             </div>
@@ -456,6 +1297,986 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+        // Database Configuration
+        const DB_NAME = 'InternshipTrackerDB';
+        const DB_VERSION = 1;
+        const STORES = {
+            TASKS: 'tasks',
+            SETTINGS: 'settings'
+        };
+
+        // Constants
+        const TOTAL_DAYS = 548;
+        const FIXED_START_DATE = '2025-12-22'; // December 22, 2025
+        const USERS = {
+            'admin': { password: 'admin@asmath', role: 'admin' },
+            'admin2': { password: 'admin@AHBETA', role: 'viewer' }
+        };
+
+        // Global Variables
+        let db = null;
+        let currentUser = null;
+        let currentRole = null;
+        let currentTaskId = null;
+        let selectedDate = new Date();
+        let filterDate = null;
+        let tasksLimit = 20;
+
+        // Initialize Application
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeDatabase();
+            setupEventListeners();
+            updateCurrentDate();
+            
+            // Set fixed start date in UI
+            document.getElementById('start-date').value = FIXED_START_DATE;
+            document.getElementById('report-start-date').textContent = `Start Date: December 22, 2025`;
+            
+            // Set today's date as default task date
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('task-date').value = today;
+            selectedDate = new Date(today);
+            
+            // Hide warning box initially
+            document.getElementById('date-warning').style.display = 'none';
+        });
+
+        // Database Functions
+        function initializeDatabase() {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+            request.onerror = (event) => {
+                console.error('Database error:', event.target.error);
+                showToast('Database initialization failed!', 'error');
+            };
+
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+
+                // Create tasks store
+                if (!db.objectStoreNames.contains(STORES.TASKS)) {
+                    const tasksStore = db.createObjectStore(STORES.TASKS, { keyPath: 'id', autoIncrement: true });
+                    tasksStore.createIndex('date', 'date', { unique: true });
+                    tasksStore.createIndex('dayNumber', 'dayNumber');
+                }
+
+                // Create settings store
+                if (!db.objectStoreNames.contains(STORES.SETTINGS)) {
+                    const settingsStore = db.createObjectStore(STORES.SETTINGS, { keyPath: 'key' });
+                    settingsStore.createIndex('key', 'key', { unique: true });
+                }
+            };
+
+            request.onsuccess = (event) => {
+                db = event.target.result;
+                console.log('Database initialized successfully');
+                initializeDefaultData();
+            };
+        }
+
+        function initializeDefaultData() {
+            // Initialize fixed start date
+            setSetting('startDate', FIXED_START_DATE);
+        }
+
+        // Task Operations
+        async function addOrUpdateTask(date, task) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject(new Error('Database not initialized'));
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.TASKS], 'readwrite');
+                const store = transaction.objectStore(STORES.TASKS);
+                const dateIndex = store.index('date');
+                
+                // Check if task exists for this date
+                const request = dateIndex.get(date);
+
+                request.onsuccess = () => {
+                    const existingTask = request.result;
+                    
+                    if (existingTask) {
+                        // Update existing task
+                        existingTask.task = task;
+                        existingTask.updatedAt = new Date().toISOString();
+                        
+                        const updateRequest = store.put(existingTask);
+                        updateRequest.onsuccess = () => resolve({ action: 'updated', task: existingTask });
+                        updateRequest.onerror = () => reject(updateRequest.error);
+                    } else {
+                        // Add new task
+                        const dayNumber = calculateDayNumber(date);
+                        
+                        const newTask = {
+                            date: date,
+                            task: task,
+                            dayNumber: dayNumber,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                        };
+
+                        const addRequest = store.add(newTask);
+                        addRequest.onsuccess = () => resolve({ action: 'added', task: newTask });
+                        addRequest.onerror = () => reject(addRequest.error);
+                    }
+                };
+
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getTaskByDate(date) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    resolve(null);
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.TASKS], 'readonly');
+                const store = transaction.objectStore(STORES.TASKS);
+                const dateIndex = store.index('date');
+                const request = dateIndex.get(date);
+
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getAllTasks(filterDate = null) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    resolve([]);
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.TASKS], 'readonly');
+                const store = transaction.objectStore(STORES.TASKS);
+                const request = store.getAll();
+
+                request.onsuccess = () => {
+                    let tasks = request.result || [];
+                    
+                    if (filterDate) {
+                        tasks = tasks.filter(task => task.date === filterDate);
+                    }
+                    
+                    // Sort by date descending
+                    tasks.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    resolve(tasks);
+                };
+
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getTasksByDayOrder() {
+            try {
+                const tasks = await getAllTasks();
+                
+                // Calculate day numbers for all tasks
+                const tasksWithDays = tasks.map(task => {
+                    const dayNumber = calculateDayNumber(task.date);
+                    return { ...task, dayNumber: dayNumber > 0 ? dayNumber : null };
+                }).filter(task => task.dayNumber !== null);
+                
+                // Sort by day number
+                tasksWithDays.sort((a, b) => a.dayNumber - b.dayNumber);
+                return tasksWithDays;
+            } catch (error) {
+                console.error('Error getting tasks by day order:', error);
+                return [];
+            }
+        }
+
+        async function updateTask(id, task) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject(new Error('Database not initialized'));
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.TASKS], 'readwrite');
+                const store = transaction.objectStore(STORES.TASKS);
+                
+                const getRequest = store.get(Number(id));
+                
+                getRequest.onsuccess = () => {
+                    const existingTask = getRequest.result;
+                    if (existingTask) {
+                        existingTask.task = task;
+                        existingTask.updatedAt = new Date().toISOString();
+                        
+                        const updateRequest = store.put(existingTask);
+                        updateRequest.onsuccess = () => resolve(true);
+                        updateRequest.onerror = () => reject(updateRequest.error);
+                    } else {
+                        reject(new Error('Task not found'));
+                    }
+                };
+                
+                getRequest.onerror = () => reject(getRequest.error);
+            });
+        }
+
+        async function deleteTask(id) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject(new Error('Database not initialized'));
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.TASKS], 'readwrite');
+                const store = transaction.objectStore(STORES.TASKS);
+                const request = store.delete(Number(id));
+
+                request.onsuccess = () => resolve(true);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function clearAllTasks() {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    reject(new Error('Database not initialized'));
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.TASKS], 'readwrite');
+                const store = transaction.objectStore(STORES.TASKS);
+                const request = store.clear();
+
+                request.onsuccess = () => resolve(true);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function getTaskCount() {
+            const tasks = await getAllTasks();
+            return tasks.length;
+        }
+
+        async function getActiveDays() {
+            const tasks = await getAllTasks();
+            const uniqueDates = new Set(tasks.map(task => task.date));
+            return uniqueDates.size;
+        }
+
+        // Settings Operations
+        function setSetting(key, value) {
+            if (!db) return;
+            
+            const transaction = db.transaction([STORES.SETTINGS], 'readwrite');
+            const store = transaction.objectStore(STORES.SETTINGS);
+            
+            const setting = {
+                key: key,
+                value: value,
+                updatedAt: new Date().toISOString()
+            };
+
+            store.put(setting);
+        }
+
+        async function getSetting(key) {
+            return new Promise((resolve, reject) => {
+                if (!db) {
+                    // Return fixed start date if DB not available
+                    if (key === 'startDate') {
+                        resolve(FIXED_START_DATE);
+                    } else {
+                        resolve(null);
+                    }
+                    return;
+                }
+                
+                const transaction = db.transaction([STORES.SETTINGS], 'readonly');
+                const store = transaction.objectStore(STORES.SETTINGS);
+                const request = store.get(key);
+
+                request.onsuccess = () => {
+                    if (key === 'startDate') {
+                        // Always return fixed start date
+                        resolve(FIXED_START_DATE);
+                    } else {
+                        resolve(request.result ? request.result.value : null);
+                    }
+                };
+                request.onerror = () => {
+                    if (key === 'startDate') {
+                        resolve(FIXED_START_DATE);
+                    } else {
+                        reject(request.error);
+                    }
+                };
+            });
+        }
+
+        // Helper Functions
+        function calculateDayNumber(date) {
+            const taskDate = new Date(date);
+            const startDate = new Date(FIXED_START_DATE);
+            
+            const diffTime = taskDate - startDate;
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            
+            return diffDays > 0 ? diffDays : 0;
+        }
+
+        function calculateProgress() {
+            const today = new Date();
+            const start = new Date(FIXED_START_DATE);
+            
+            const completed = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+            const remaining = TOTAL_DAYS - completed;
+            const progress = Math.min(Math.max(completed, 0) / TOTAL_DAYS, 1) * 100;
+            
+            return {
+                completed: Math.max(completed, 0),
+                remaining: Math.max(remaining, 0),
+                progress: progress
+            };
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        }
+
+        function formatDateShort(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastIcon = toast.querySelector('.toast-icon');
+            const toastMessage = toast.querySelector('.toast-message');
+            
+            // Set icon based on type
+            let iconClass = 'fas fa-info-circle';
+            switch (type) {
+                case 'success':
+                    iconClass = 'fas fa-check-circle';
+                    break;
+                case 'error':
+                    iconClass = 'fas fa-exclamation-circle';
+                    break;
+                case 'warning':
+                    iconClass = 'fas fa-exclamation-triangle';
+                    break;
+            }
+            
+            toastIcon.className = `toast-icon ${iconClass}`;
+            toastMessage.textContent = message;
+            toast.className = `toast ${type} active`;
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('active');
+            }, 3000);
+        }
+
+        function showModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.add('active');
+        }
+
+        function hideModal(modalId) {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove('active');
+        }
+
+        function updateCurrentDate() {
+            const today = new Date();
+            const dateString = today.toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+            
+            document.getElementById('current-date').textContent = dateString;
+            document.getElementById('report-date').textContent = dateString;
+        }
+
+        function updateProgress() {
+            const progress = calculateProgress();
+            
+            // Update progress bar
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            progressFill.style.width = `${progress.progress}%`;
+            progressText.textContent = `${Math.round(progress.progress)}%`;
+            
+            // Update metrics
+            document.getElementById('completed-days').textContent = progress.completed;
+            document.getElementById('remaining-days').textContent = progress.remaining;
+        }
+
+        // UI Update Functions
+        async function updateAdminDashboard() {
+            // Update progress (always use fixed date)
+            updateProgress();
+            
+            // Update task date
+            const taskDateInput = document.getElementById('task-date');
+            if (!taskDateInput.value) {
+                const today = new Date().toISOString().split('T')[0];
+                taskDateInput.value = today;
+                selectedDate = new Date(today);
+            } else {
+                selectedDate = new Date(taskDateInput.value);
+            }
+            
+            // Check if date has task
+            const existingTask = await getTaskByDate(taskDateInput.value);
+            const warningBox = document.getElementById('date-warning');
+            const saveBtn = document.getElementById('save-task');
+            
+            if (existingTask) {
+                warningBox.style.display = 'flex';
+                document.getElementById('warning-date').textContent = formatDateShort(taskDateInput.value);
+                document.getElementById('task-description').value = existingTask.task;
+                saveBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Update Task';
+            } else {
+                warningBox.style.display = 'none';
+                document.getElementById('task-description').value = '';
+                saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Task';
+            }
+            
+            // Update task list
+            await updateTaskList();
+            
+            // Update statistics
+            updateStatistics();
+        }
+
+        async function updateTaskList() {
+            const tasksContainer = document.getElementById('tasks-container');
+            const noTasks = document.getElementById('no-tasks');
+            
+            let tasks = await getAllTasks(filterDate);
+            tasks = tasks.slice(0, tasksLimit);
+            
+            if (tasks.length === 0) {
+                tasksContainer.innerHTML = '';
+                noTasks.classList.add('active');
+                return;
+            }
+            
+            noTasks.classList.remove('active');
+            tasksContainer.innerHTML = '';
+            
+            tasks.forEach(task => {
+                const dayNumber = calculateDayNumber(task.date);
+                const dayDisplay = dayNumber > 0 ? `<span class="day-badge">Day ${dayNumber}</span>` : '';
+                
+                const taskElement = document.createElement('div');
+                taskElement.className = 'task-item';
+                taskElement.innerHTML = `
+                    <div class="task-content">
+                        <div class="task-date">
+                            ${dayDisplay}
+                            <i class="fas fa-calendar"></i> ${formatDateShort(task.date)}
+                        </div>
+                        <div class="task-text">${task.task}</div>
+                    </div>
+                    <div class="task-actions">
+                        <button class="btn btn-secondary btn-edit" data-id="${task.id}">
+                            <i class="fas fa-edit"></i> Edit
+                        </button>
+                    </div>
+                `;
+                
+                tasksContainer.appendChild(taskElement);
+            });
+            
+            // Add event listeners to edit buttons
+            document.querySelectorAll('.btn-edit').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const taskId = e.currentTarget.getAttribute('data-id');
+                    await openEditModal(taskId);
+                });
+            });
+        }
+
+        async function updateReportDashboard() {
+            // Update current day
+            const progress = calculateProgress();
+            document.getElementById('report-current-day').textContent = progress.completed > 0 ? progress.completed : 'Not started';
+            
+            // Update tasks in report view
+            await updateReportTasks();
+        }
+
+        async function updateReportTasks() {
+            const tasksContainer = document.getElementById('report-tasks-container');
+            const noTasks = document.getElementById('no-report-tasks');
+            
+            let tasks = await getTasksByDayOrder();
+            const searchTerm = document.getElementById('search-tasks').value.toLowerCase();
+            
+            if (tasks.length === 0) {
+                tasksContainer.innerHTML = '';
+                noTasks.classList.add('active');
+                return;
+            }
+            
+            // Filter tasks by search term
+            if (searchTerm) {
+                tasks = tasks.filter(task => task.task.toLowerCase().includes(searchTerm));
+            }
+            
+            if (tasks.length === 0) {
+                tasksContainer.innerHTML = '';
+                noTasks.classList.add('active');
+                return;
+            }
+            
+            noTasks.classList.remove('active');
+            
+            // Update statistics
+            document.getElementById('report-days').textContent = tasks.length;
+            
+            // Display tasks
+            tasksContainer.innerHTML = '';
+            
+            tasks.forEach(task => {
+                const taskElement = document.createElement('div');
+                taskElement.className = 'report-task-item';
+                taskElement.innerHTML = `
+                    <div class="report-task-header">
+                        <div class="day-badge">Day ${task.dayNumber}</div>
+                        <div class="report-task-date">${formatDate(task.date)}</div>
+                    </div>
+                    <div class="report-task-content">${task.task}</div>
+                `;
+                
+                tasksContainer.appendChild(taskElement);
+            });
+        }
+
+        async function updateStatistics() {
+            const totalTasks = await getTaskCount();
+            const activeDays = await getActiveDays();
+            const progress = calculateProgress();
+            
+            document.getElementById('total-tasks').textContent = totalTasks;
+            document.getElementById('active-days').textContent = activeDays;
+            document.getElementById('current-day').textContent = progress.completed > 0 ? progress.completed : 'Not started';
+        }
+
+        async function openEditModal(taskId) {
+            try {
+                const transaction = db.transaction([STORES.TASKS], 'readonly');
+                const store = transaction.objectStore(STORES.TASKS);
+                const request = store.get(Number(taskId));
+                
+                request.onsuccess = () => {
+                    const task = request.result;
+                    if (task) {
+                        currentTaskId = taskId;
+                        document.getElementById('edit-task-date').value = task.date;
+                        document.getElementById('edit-task-description').value = task.task;
+                        showModal('edit-modal');
+                    }
+                };
+            } catch (error) {
+                console.error('Error opening edit modal:', error);
+                showToast('Error loading task for editing', 'error');
+            }
+        }
+
+        // Export Functions
+        async function exportToCSV() {
+            try {
+                const tasks = await getTasksByDayOrder();
+                
+                if (tasks.length === 0) {
+                    showToast('No tasks to export', 'warning');
+                    return;
+                }
+                
+                const headers = ['Day Number', 'Date', 'Formatted Date', 'Task'];
+                const csvContent = [
+                    headers.join(','),
+                    ...tasks.map(task => [
+                        task.dayNumber,
+                        `"${task.date}"`,
+                        `"${formatDate(task.date)}"`,
+                        `"${task.task.replace(/"/g, '""')}"`
+                    ].join(','))
+                ].join('\n');
+                
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                
+                const today = new Date().toISOString().split('T')[0];
+                link.setAttribute('href', url);
+                link.setAttribute('download', `internship_report_${today}.csv`);
+                link.style.visibility = 'hidden';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                showToast('CSV exported successfully!', 'success');
+            } catch (error) {
+                console.error('Export error:', error);
+                showToast('Error exporting CSV', 'error');
+            }
+        }
+
+        async function exportToJSON() {
+            try {
+                const tasks = await getTasksByDayOrder();
+                
+                if (tasks.length === 0) {
+                    showToast('No tasks to export', 'warning');
+                    return;
+                }
+                
+                const jsonData = {
+                    exportDate: new Date().toISOString(),
+                    startDate: FIXED_START_DATE,
+                    totalTasks: tasks.length,
+                    tasks: tasks.map(task => ({
+                        dayNumber: task.dayNumber,
+                        date: task.date,
+                        formattedDate: formatDate(task.date),
+                        task: task.task,
+                        createdAt: task.createdAt,
+                        updatedAt: task.updatedAt
+                    }))
+                };
+                
+                const jsonString = JSON.stringify(jsonData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                
+                const today = new Date().toISOString().split('T')[0];
+                link.setAttribute('href', url);
+                link.setAttribute('download', `internship_report_${today}.json`);
+                link.style.visibility = 'hidden';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+                
+                showToast('JSON exported successfully!', 'success');
+            } catch (error) {
+                console.error('Export error:', error);
+                showToast('Error exporting JSON', 'error');
+            }
+        }
+
+        // Event Listeners Setup
+        function setupEventListeners() {
+            // Login screen
+            document.getElementById('login-btn').addEventListener('click', handleLogin);
+            document.getElementById('clear-btn').addEventListener('click', () => {
+                document.getElementById('username').value = '';
+                document.getElementById('password').value = '';
+            });
+            
+            // Logout buttons
+            document.getElementById('logout-admin').addEventListener('click', handleLogout);
+            document.getElementById('logout-report').addEventListener('click', handleLogout);
+            
+            // Admin dashboard
+            document.getElementById('prev-day').addEventListener('click', () => navigateDate(-1));
+            document.getElementById('today').addEventListener('click', () => navigateDate(0));
+            document.getElementById('next-day').addEventListener('click', () => navigateDate(1));
+            document.getElementById('save-task').addEventListener('click', handleSaveTask);
+            document.getElementById('clear-form').addEventListener('click', () => {
+                document.getElementById('task-description').value = '';
+                document.getElementById('date-warning').style.display = 'none';
+                document.getElementById('save-task').innerHTML = '<i class="fas fa-save"></i> Save Task';
+            });
+            document.getElementById('view-date').addEventListener('click', handleViewDate);
+            
+            // Task date change
+            document.getElementById('task-date').addEventListener('change', (e) => {
+                selectedDate = new Date(e.target.value);
+                updateAdminDashboard();
+            });
+            
+            // Filter controls
+            document.getElementById('filter-date').addEventListener('change', async (e) => {
+                filterDate = e.target.value || null;
+                await updateTaskList();
+            });
+            
+            document.getElementById('task-limit').addEventListener('input', async (e) => {
+                tasksLimit = parseInt(e.target.value);
+                document.getElementById('limit-value').textContent = tasksLimit;
+                await updateTaskList();
+            });
+            
+            document.getElementById('clear-filter').addEventListener('click', () => {
+                document.getElementById('filter-date').value = '';
+                filterDate = null;
+                updateTaskList();
+            });
+            
+            // Export buttons
+            document.getElementById('export-csv').addEventListener('click', exportToCSV);
+            document.getElementById('export-json').addEventListener('click', exportToJSON);
+            
+            // Report export buttons
+            document.getElementById('export-report-csv').addEventListener('click', exportToCSV);
+            document.getElementById('export-report-json').addEventListener('click', exportToJSON);
+            
+            // Report search
+            document.getElementById('search-tasks').addEventListener('input', updateReportTasks);
+            
+            // Database management
+            document.getElementById('clear-db').addEventListener('click', () => {
+                showConfirmModal('Are you sure you want to delete all tasks? This action cannot be undone.', handleClearAllTasks);
+            });
+            
+            document.getElementById('db-info').addEventListener('click', showDatabaseInfo);
+            
+            // Modals
+            document.querySelectorAll('.close-modal').forEach(button => {
+                button.addEventListener('click', () => {
+                    button.closest('.modal').classList.remove('active');
+                });
+            });
+            
+            // Edit modal buttons
+            document.getElementById('save-edit').addEventListener('click', handleSaveEdit);
+            document.getElementById('delete-task').addEventListener('click', handleDeleteTask);
+            document.getElementById('cancel-edit').addEventListener('click', () => hideModal('edit-modal'));
+            
+            // Confirm modal
+            document.getElementById('confirm-yes').addEventListener('click', () => {
+                const callback = window.confirmCallback;
+                if (callback) callback();
+                hideModal('confirm-modal');
+            });
+            
+            document.getElementById('confirm-no').addEventListener('click', () => {
+                hideModal('confirm-modal');
+            });
+            
+            // Close modals on outside click
+            document.querySelectorAll('.modal').forEach(modal => {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.remove('active');
+                    }
+                });
+            });
+            
+            // Enter key in login form
+            document.getElementById('password').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleLogin();
+                }
+            });
+            
+            // Task description enter key
+            document.getElementById('task-description').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    handleSaveTask();
+                }
+            });
+        }
+
+        // Event Handlers
+        async function handleLogin() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showToast('Please enter username and password', 'warning');
+                return;
+            }
+            
+            // Check credentials
+            let user = null;
+            if (USERS[username] && USERS[username].password === password) {
+                user = {
+                    username: username,
+                    role: USERS[username].role
+                };
+            }
+            
+            if (user) {
+                currentUser = user.username;
+                currentRole = user.role;
+                
+                // Switch to appropriate dashboard
+                document.getElementById('login-screen').classList.remove('active');
+                
+                if (currentRole === 'admin') {
+                    document.getElementById('admin-dashboard').classList.add('active');
+                    document.getElementById('current-user').textContent = currentUser;
+                    await updateAdminDashboard();
+                } else {
+                    document.getElementById('report-dashboard').classList.add('active');
+                    document.getElementById('report-user').textContent = currentUser;
+                    await updateReportDashboard();
+                }
+                
+                showToast(`Welcome ${currentUser}!`, 'success');
+            } else {
+                showToast('Invalid username or password', 'error');
+            }
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            currentRole = null;
+            currentTaskId = null;
+            filterDate = null;
+            
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            
+            document.getElementById('login-screen').classList.add('active');
+            
+            // Clear form
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            
+            showToast('Logged out successfully', 'success');
+        }
+
+        function navigateDate(days) {
+            if (days === 0) {
+                selectedDate = new Date();
+            } else {
+                selectedDate.setDate(selectedDate.getDate() + days);
+            }
+            
+            document.getElementById('task-date').value = selectedDate.toISOString().split('T')[0];
+            updateAdminDashboard();
+        }
+
+        async function handleSaveTask() {
+            const date = document.getElementById('task-date').value;
+            const task = document.getElementById('task-description').value.trim();
+            
+            if (!date) {
+                showToast('Please select a date', 'warning');
+                return;
+            }
+            
+            if (!task) {
+                showToast('Please enter task description', 'warning');
+                return;
+            }
+            
+            // Check if date is before start date
+            const taskDate = new Date(date);
+            const startDate = new Date(FIXED_START_DATE);
+            
+            if (taskDate < startDate) {
+                showToast('Task date cannot be before internship start date (Dec 22, 2025)', 'warning');
+                return;
+            }
+            
+            try {
+                const result = await addOrUpdateTask(date, task);
+                showToast(`Task ${result.action} successfully!`, 'success');
+                updateAdminDashboard();
+            } catch (error) {
+                console.error('Save task error:', error);
+                showToast('Error saving task: ' + error.message, 'error');
+            }
+        }
+
+        function handleViewDate() {
+            const taskDate = document.getElementById('task-date').value;
+            document.getElementById('filter-date').value = taskDate;
+            filterDate = taskDate;
+            updateTaskList();
+        }
+
+        async function handleSaveEdit() {
+            const task = document.getElementById('edit-task-description').value.trim();
+            
+            if (!task) {
+                showToast('Please enter task description', 'warning');
+                return;
+            }
+            
+            try {
+                await updateTask(currentTaskId, task);
+                showToast('Task updated successfully!', 'success');
+                hideModal('edit-modal');
+                updateAdminDashboard();
+                if (currentRole === 'viewer') {
+                    updateReportDashboard();
+                }
+            } catch (error) {
+                showToast('Error updating task: ' + error.message, 'error');
+            }
+        }
+
+        async function handleDeleteTask() {
+            try {
+                await deleteTask(currentTaskId);
+                showToast('Task deleted successfully!', 'success');
+                hideModal('edit-modal');
+                updateAdminDashboard();
+                if (currentRole === 'viewer') {
+                    updateReportDashboard();
+                }
+            } catch (error) {
+                showToast('Error deleting task: ' + error.message, 'error');
+            }
+        }
+
+        async function handleClearAllTasks() {
+            try {
+                await clearAllTasks();
+                showToast('All tasks deleted successfully!', 'success');
+                updateAdminDashboard();
+                if (currentRole === 'viewer') {
+                    updateReportDashboard();
+                }
+            } catch (error) {
+                showToast('Error clearing tasks: ' + error.message, 'error');
+            }
+        }
+
+        async function showDatabaseInfo() {
+            try {
+                const totalTasks = await getTaskCount();
+                const activeDays = await getActiveDays();
+                
+                document.getElementById('info-tasks').textContent = totalTasks;
+                document.getElementById('info-active-days').textContent = activeDays;
+                document.getElementById('info-users').textContent = Object.keys(USERS).length;
+                
+                showModal('info-modal');
+            } catch (error) {
+                showToast('Error loading database info', 'error');
+            }
+        }
+
+        function showConfirmModal(message, callback) {
+            document.getElementById('confirm-message').textContent = message;
+            window.confirmCallback = callback;
+            showModal('confirm-modal');
+        }
+    </script>
 </body>
 </html>
