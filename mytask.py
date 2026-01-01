@@ -3,10 +3,8 @@ from datetime import date, timedelta, datetime
 import pandas as pd
 import io
 import csv
-import psycopg2
-from psycopg2 import sql
-from psycopg2.extras import RealDictCursor
-import os
+import sqlite3
+from pathlib import Path
 
 # ---------------- CONFIG ----------------
 TOTAL_DAYS = 548
@@ -16,17 +14,18 @@ USERS = {
     "admin2": "admin@AHBETA"  # Report-only access
 }
 
-# PostgreSQL Connection String (Neon Database)
-DATABASE_URL = "postgresql://neondb_owner:npg_j3GtRpC7zoJr@ep-curly-glade-aha54euu-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+# SQLite Database File
+DB_FILE = "internship_tracker.db"
 
-# ---------------- POSTGRESQL DATABASE FUNCTIONS ----------------
+# ---------------- SQLITE DATABASE FUNCTIONS ----------------
 @st.cache_resource
 def get_db_connection():
-    """Establish PostgreSQL connection"""
+    """Establish SQLite connection"""
     try:
-        conn = psycopg2.connect(DATABASE_URL)
+        conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
         create_tables(conn)
-        st.success("✅ Connected to PostgreSQL (Neon Database)!")
+        st.success("✅ Connected to SQLite Database!")
         return conn
     except Exception as e:
         st.error(f"❌ Database Connection Failed: {str(e)}")
@@ -36,52 +35,59 @@ def get_db_connection():
 def create_tables(conn):
     """Create necessary tables if they don't exist"""
     try:
-        with conn.cursor() as cursor:
-            # Create users table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id SERIAL PRIMARY KEY,
-                    username VARCHAR(50) UNIQUE NOT NULL,
-                    password VARCHAR(100) NOT NULL,
-                    role VARCHAR(20) NOT NULL DEFAULT 'viewer',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Create tasks table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id SERIAL PRIMARY KEY,
-                    task_date DATE UNIQUE NOT NULL,
-                    task TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Create settings table
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS settings (
-                    id SERIAL PRIMARY KEY,
-                    setting_key VARCHAR(50) UNIQUE NOT NULL,
-                    setting_value TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            conn.commit()
-            
-            # Initialize default users
-            for username, password in USERS.items():
-                role = "admin" if username == "admin" else "viewer"
+        cursor = conn.cursor()
+        
+        # Create users table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'viewer',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create tasks table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_date TEXT UNIQUE NOT NULL,
+                task TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create settings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Create indexes for better performance
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_date ON tasks(task_date)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        
+        conn.commit()
+        
+        # Initialize default users
+        for username, password in USERS.items():
+            role = "admin" if username == "admin" else "viewer"
+            try:
                 cursor.execute("""
                     INSERT INTO users (username, password, role)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (username) DO NOTHING
+                    VALUES (?, ?, ?)
                 """, (username, password, role))
-            
-            conn.commit()
-            
+            except sqlite3.IntegrityError:
+                pass  # User already exists
+        
+        conn.commit()
+        
     except Exception as e:
         conn.rollback()
         st.error(f"Error creating tables: {str(e)}")
@@ -194,8 +200,8 @@ def apply_custom_css():
         margin-left: 10px;
     }
     
-    .db-postgres {
-        background-color: #336791;
+    .db-sqlite {
+        background-color: #003B57;
         color: white;
     }
     
@@ -262,18 +268,22 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 # ---------------- HELPER FUNCTIONS ----------------
-def execute_query(query, params=None, fetch=False):
+def execute_query(query, params=None, fetch=False, fetchone=False):
     """Execute a database query"""
     if conn:
         try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
-                cursor.execute(query, params or ())
-                if fetch:
-                    result = cursor.fetchall()
-                else:
-                    conn.commit()
-                    result = None
-                return result
+            cursor = conn.cursor()
+            cursor.execute(query, params or ())
+            
+            if fetch:
+                result = cursor.fetchall()
+                return [dict(row) for row in result]
+            elif fetchone:
+                result = cursor.fetchone()
+                return dict(result) if result else None
+            else:
+                conn.commit()
+                return cursor.lastrowid
         except Exception as e:
             conn.rollback()
             st.error(f"Database error: {str(e)}")
@@ -283,23 +293,25 @@ def execute_query(query, params=None, fetch=False):
 
 def check_date_exists(selected_date):
     """Check if a task exists for the given date"""
+    date_str = selected_date.isoformat()
+    
     if conn:
         result = execute_query(
-            "SELECT * FROM tasks WHERE task_date = %s",
-            (selected_date,),
-            fetch=True
+            "SELECT * FROM tasks WHERE task_date = ?",
+            (date_str,),
+            fetchone=True
         )
-        return result[0] if result else None
+        return result
     else:
         # Fallback to session state
-        date_str = selected_date.isoformat()
         for task in st.session_state.get('local_tasks', []):
             if task.get("task_date") == date_str:
                 return task
         return None
 
 def save_or_update_task(selected_date, task_text):
-    """Save or update task in PostgreSQL"""
+    """Save or update task in SQLite"""
+    date_str = selected_date.isoformat()
     existing_task = check_date_exists(selected_date)
     
     if conn:
@@ -308,10 +320,10 @@ def save_or_update_task(selected_date, task_text):
             execute_query(
                 """
                 UPDATE tasks 
-                SET task = %s, updated_at = CURRENT_TIMESTAMP 
-                WHERE task_date = %s
+                SET task = ?, updated_at = CURRENT_TIMESTAMP 
+                WHERE task_date = ?
                 """,
-                (task_text, selected_date)
+                (task_text, date_str)
             )
             action = "updated"
             was_update = True
@@ -320,27 +332,23 @@ def save_or_update_task(selected_date, task_text):
             execute_query(
                 """
                 INSERT INTO tasks (task_date, task) 
-                VALUES (%s, %s)
-                ON CONFLICT (task_date) DO UPDATE 
-                SET task = EXCLUDED.task, updated_at = CURRENT_TIMESTAMP
+                VALUES (?, ?)
                 """,
-                (selected_date, task_text)
+                (date_str, task_text)
             )
             action = "saved"
             was_update = False
     else:
         # Fallback to session state
-        date_str = selected_date.isoformat()
-        existing_task = None
         local_tasks = st.session_state.get('local_tasks', [])
+        task_index = None
         
         for i, task in enumerate(local_tasks):
             if task.get("task_date") == date_str:
-                existing_task = task
                 task_index = i
                 break
         
-        if existing_task:
+        if task_index is not None:
             # Update existing task
             local_tasks[task_index]["task"] = task_text
             local_tasks[task_index]["updated_at"] = datetime.now().isoformat()
@@ -367,7 +375,7 @@ def update_task(task_id, new_task):
     """Update task by ID"""
     if conn:
         execute_query(
-            "UPDATE tasks SET task = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            "UPDATE tasks SET task = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (new_task, task_id)
         )
     else:
@@ -381,7 +389,7 @@ def update_task(task_id, new_task):
 def delete_task(task_id):
     """Delete task by ID"""
     if conn:
-        execute_query("DELETE FROM tasks WHERE id = %s", (task_id,))
+        execute_query("DELETE FROM tasks WHERE id = ?", (task_id,))
     else:
         # Fallback to session state
         local_tasks = st.session_state.get('local_tasks', [])
@@ -397,7 +405,6 @@ def get_tasks_sorted_by_day(start_date):
             "SELECT id, task_date, task FROM tasks ORDER BY task_date",
             fetch=True
         )
-        tasks = [dict(task) for task in tasks] if tasks else []
     else:
         # Fallback to session state
         tasks = st.session_state.get('local_tasks', [])
@@ -412,9 +419,11 @@ def get_tasks_sorted_by_day(start_date):
     # Calculate day numbers
     tasks_with_days = []
     for task in tasks:
-        task_date = task.get("task_date")
-        if isinstance(task_date, str):
-            task_date = date.fromisoformat(task_date)
+        task_date_str = task.get("task_date")
+        if isinstance(task_date_str, str):
+            task_date = date.fromisoformat(task_date_str)
+        else:
+            task_date = task_date_str
         
         # Calculate day number
         day_number = None
@@ -428,10 +437,11 @@ def get_tasks_sorted_by_day(start_date):
                 pass
         
         if day_number:
+            formatted_date = task_date.strftime("%A, %d %B %Y") if isinstance(task_date, date) else date.fromisoformat(task_date_str).strftime("%A, %d %B %Y")
             tasks_with_days.append({
                 "day_number": day_number,
-                "date": task_date.isoformat() if isinstance(task_date, date) else task_date,
-                "formatted_date": task_date.strftime("%A, %d %B %Y") if isinstance(task_date, date) else date.fromisoformat(task_date).strftime("%A, %d %B %Y"),
+                "date": task_date_str,
+                "formatted_date": formatted_date,
                 "task": task.get("task", ""),
                 "id": str(task.get("id", ""))
             })
@@ -494,16 +504,16 @@ def create_excel_download(df):
 def get_task_count():
     """Get total task count"""
     if conn:
-        result = execute_query("SELECT COUNT(*) as count FROM tasks", fetch=True)
-        return result[0]['count'] if result else 0
+        result = execute_query("SELECT COUNT(*) as count FROM tasks", fetchone=True)
+        return result['count'] if result else 0
     else:
         return len(st.session_state.get('local_tasks', []))
 
 def get_active_days():
     """Get count of distinct task dates"""
     if conn:
-        result = execute_query("SELECT COUNT(DISTINCT task_date) as count FROM tasks", fetch=True)
-        return result[0]['count'] if result else 0
+        result = execute_query("SELECT COUNT(DISTINCT task_date) as count FROM tasks", fetchone=True)
+        return result['count'] if result else 0
     else:
         dates = set(task.get("task_date") for task in st.session_state.get('local_tasks', []))
         return len(dates)
@@ -512,11 +522,11 @@ def get_setting(key):
     """Get a setting value"""
     if conn:
         result = execute_query(
-            "SELECT setting_value FROM settings WHERE setting_key = %s",
+            "SELECT setting_value FROM settings WHERE setting_key = ?",
             (key,),
-            fetch=True
+            fetchone=True
         )
-        return result[0]['setting_value'] if result else None
+        return result['setting_value'] if result else None
     else:
         return st.session_state.get('local_settings', {}).get(key)
 
@@ -526,9 +536,9 @@ def save_setting(key, value):
         execute_query(
             """
             INSERT INTO settings (setting_key, setting_value) 
-            VALUES (%s, %s)
-            ON CONFLICT (setting_key) DO UPDATE 
-            SET setting_value = EXCLUDED.setting_value, updated_at = CURRENT_TIMESTAMP
+            VALUES (?, ?)
+            ON CONFLICT(setting_key) DO UPDATE 
+            SET setting_value = excluded.setting_value, updated_at = CURRENT_TIMESTAMP
             """,
             (key, value)
         )
@@ -541,11 +551,11 @@ def authenticate_user(username, password):
     """Authenticate user"""
     if conn:
         result = execute_query(
-            "SELECT username, role FROM users WHERE username = %s AND password = %s",
+            "SELECT username, role FROM users WHERE username = ? AND password = ?",
             (username, password),
-            fetch=True
+            fetchone=True
         )
-        return result[0] if result else None
+        return result
     else:
         # Fallback: Check against USERS dictionary
         if username in USERS and USERS[username] == password:
@@ -554,6 +564,35 @@ def authenticate_user(username, password):
                 "role": "admin" if username == "admin" else "viewer"
             }
         return None
+
+def get_tasks_with_filter(filter_date=None, limit=20):
+    """Get tasks with optional filter and limit"""
+    if conn:
+        if filter_date:
+            tasks = execute_query(
+                "SELECT id, task_date, task FROM tasks WHERE task_date = ? ORDER BY task_date DESC LIMIT ?",
+                (filter_date.isoformat(), limit),
+                fetch=True
+            )
+        else:
+            tasks = execute_query(
+                "SELECT id, task_date, task FROM tasks ORDER BY task_date DESC LIMIT ?",
+                (limit,),
+                fetch=True
+            )
+    else:
+        # Fallback to session state
+        tasks = st.session_state.get('local_tasks', [])
+        
+        # Apply filter
+        if filter_date:
+            filter_date_str = filter_date.isoformat()
+            tasks = [task for task in tasks if task.get("task_date") == filter_date_str]
+        
+        # Sort and limit
+        tasks = sorted(tasks, key=lambda x: x.get("task_date", ""), reverse=True)[:limit]
+    
+    return tasks or []
 
 # Initialize session state for fallback
 if 'local_tasks' not in st.session_state:
@@ -566,8 +605,8 @@ def login():
     st.title("🔐 Login")
     
     # Database status indicator
-    db_class = "db-postgres" if conn else "db-local"
-    db_text = "PostgreSQL (Neon) ✓" if conn else "Local Storage"
+    db_class = "db-sqlite" if conn else "db-local"
+    db_text = "SQLite Database ✓" if conn else "Local Storage"
     
     st.markdown(f"""
     <div style="text-align: center; margin-bottom: 20px;">
@@ -637,8 +676,8 @@ def report_view():
         """, unsafe_allow_html=True)
     
     # Database status
-    db_class = "db-postgres" if conn else "db-local"
-    db_text = "PostgreSQL (Neon) ✓" if conn else "Local Storage"
+    db_class = "db-sqlite" if conn else "db-local"
+    db_text = "SQLite Database ✓" if conn else "Local Storage"
     st.markdown(f'<div style="text-align: center;"><span class="db-status {db_class}">{db_text}</span></div>', 
                unsafe_allow_html=True)
     
@@ -818,8 +857,8 @@ def admin_view():
         """, unsafe_allow_html=True)
     
     # Database status
-    db_class = "db-postgres" if conn else "db-local"
-    db_text = "PostgreSQL (Neon) ✓" if conn else "Local Storage"
+    db_class = "db-sqlite" if conn else "db-local"
+    db_text = "SQLite Database ✓" if conn else "Local Storage"
     st.markdown(f'<div style="text-align: center;"><span class="db-status {db_class}">{db_text}</span></div>', 
                unsafe_allow_html=True)
     
@@ -1063,28 +1102,7 @@ def admin_view():
             st.rerun()
     
     # Get tasks based on filter
-    if conn:
-        query = "SELECT id, task_date, task FROM tasks"
-        params = []
-        if st.session_state.filter_date:
-            query += " WHERE task_date = %s"
-            params.append(st.session_state.filter_date)
-        query += " ORDER BY task_date DESC LIMIT %s"
-        params.append(limit)
-        
-        tasks = execute_query(query, params, fetch=True)
-        tasks = [dict(task) for task in tasks] if tasks else []
-    else:
-        # Fallback to session state
-        tasks = st.session_state.get('local_tasks', [])
-        
-        # Apply filter
-        if st.session_state.filter_date:
-            filter_date_str = st.session_state.filter_date.isoformat()
-            tasks = [task for task in tasks if task.get("task_date") == filter_date_str]
-        
-        # Sort and limit
-        tasks = sorted(tasks, key=lambda x: x.get("task_date", ""), reverse=True)[:limit]
+    tasks = get_tasks_with_filter(st.session_state.filter_date, limit)
     
     if tasks:
         for task in tasks:
@@ -1095,7 +1113,7 @@ def admin_view():
             if not task_date_str:
                 continue
             
-            # Convert to date object if needed
+            # Convert to date object
             if isinstance(task_date_str, str):
                 task_date_display = date.fromisoformat(task_date_str)
             else:
@@ -1191,12 +1209,12 @@ def admin_view():
         else:
             st.metric("Internship Start", "Not started")
     
-    # Database Management (for PostgreSQL only)
+    # Database Management (for SQLite only)
     if conn:
         st.divider()
         st.subheader("🗄️ Database Management")
         
-        col_db1, col_db2 = st.columns(2)
+        col_db1, col_db2, col_db3 = st.columns(3)
         
         with col_db1:
             if st.button("🗑️ Clear All Tasks", type="secondary", use_container_width=True):
@@ -1206,16 +1224,25 @@ def admin_view():
                     st.rerun()
         
         with col_db2:
-            if st.button("📊 Show Database Stats", use_container_width=True):
-                user_count = execute_query("SELECT COUNT(*) as count FROM users", fetch=True)[0]['count']
-                task_count = execute_query("SELECT COUNT(*) as count FROM tasks", fetch=True)[0]['count']
+            if st.button("📊 Database Info", use_container_width=True):
+                task_count = get_task_count()
+                user_count = execute_query("SELECT COUNT(*) as count FROM users", fetchone=True)['count']
+                db_size = Path(DB_FILE).stat().st_size if Path(DB_FILE).exists() else 0
                 
                 st.info(f"""
-                **Database Statistics:**
+                **Database Information:**
                 - Users: {user_count}
                 - Tasks: {task_count}
-                - Database: PostgreSQL (Neon)
+                - Database File: {DB_FILE}
+                - File Size: {db_size / 1024:.1f} KB
                 """)
+        
+        with col_db3:
+            if st.button("💾 Backup Database", use_container_width=True):
+                backup_file = f"internship_backup_{date.today().isoformat()}.db"
+                import shutil
+                shutil.copy2(DB_FILE, backup_file)
+                st.success(f"Database backed up to {backup_file}")
     
     # Logout button
     st.divider()
