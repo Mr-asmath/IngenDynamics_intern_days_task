@@ -10,8 +10,11 @@ from bson import ObjectId
 
 # ---------------- CONFIG ----------------
 TOTAL_DAYS = 548
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin@asmath"
+# User credentials
+USERS = {
+    "admin": "admin@asmath",  # Full admin access
+    "admin2": "admin@AHBETA"  # Report-only access
+}
 
 # MongoDB Connection String
 MONGODB_URI = "mongodb+srv://ingenasmath_db_user:asmath@ingen@db@cluster0.egdz6oo.mongodb.net/?appName=Cluster0"
@@ -68,13 +71,31 @@ def apply_custom_css():
         padding-bottom: 2rem;
     }
     
-    /* Card-like styling for metrics */
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
+    /* Report view specific styles */
+    .report-view {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+        border-radius: 15px;
+        color: white;
+        margin-bottom: 20px;
+    }
+    
+    .report-card {
+        background: white;
+        padding: 15px;
+        margin: 10px 0;
         border-radius: 10px;
-        border-left: 4px solid #4CAF50;
-        margin-bottom: 1rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border-left: 5px solid #4CAF50;
+    }
+    
+    .day-header {
+        background: #4CAF50;
+        color: white;
+        padding: 8px 15px;
+        border-radius: 8px;
+        margin: 15px 0 5px 0;
+        font-weight: bold;
     }
     
     /* Task cards */
@@ -111,33 +132,9 @@ def apply_custom_css():
         transform: scale(1.05);
     }
     
-    /* Progress bar animation */
-    .stProgress > div > div > div > div {
-        background-image: linear-gradient(45deg, 
-            rgba(255,255,255,0.15) 25%, 
-            transparent 25%, 
-            transparent 50%, 
-            rgba(255,255,255,0.15) 50%, 
-            rgba(255,255,255,0.15) 75%, 
-            transparent 75%, 
-            transparent);
-        background-size: 1rem 1rem;
-        animation: progress-bar-stripes 1s linear infinite;
-    }
-    
-    @keyframes progress-bar-stripes {
-        from { background-position: 1rem 0; }
-        to { background-position: 0 0; }
-    }
-    
     /* Success/Error messages */
     .stAlert {
         border-radius: 8px;
-    }
-    
-    /* Header styling */
-    .st-emotion-cache-1kyxreq {
-        justify-content: center;
     }
     
     /* MongoDB status badge */
@@ -157,6 +154,26 @@ def apply_custom_css():
     
     .mongodb-disconnected {
         background-color: #f44336;
+        color: white;
+    }
+    
+    /* User role badge */
+    .role-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: bold;
+        margin-left: 10px;
+    }
+    
+    .role-admin {
+        background-color: #2196F3;
+        color: white;
+    }
+    
+    .role-viewer {
+        background-color: #FF9800;
         color: white;
     }
     
@@ -198,35 +215,28 @@ def apply_custom_css():
     """, unsafe_allow_html=True)
 
 # ---------------- HELPER FUNCTIONS (MongoDB) ----------------
-def initialize_admin_user():
-    """Initialize admin user in MongoDB"""
+def initialize_users():
+    """Initialize users in MongoDB"""
     if client:
-        admin_user = users_collection.find_one({"username": ADMIN_USERNAME})
-        if not admin_user:
-            users_collection.insert_one({
-                "username": ADMIN_USERNAME,
-                "password": ADMIN_PASSWORD,
-                "created_at": datetime.now()
-            })
+        for username, password in USERS.items():
+            existing_user = users_collection.find_one({"username": username})
+            if not existing_user:
+                users_collection.insert_one({
+                    "username": username,
+                    "password": password,
+                    "role": "admin" if username == "admin" else "viewer",
+                    "created_at": datetime.now()
+                })
     else:
         # Local storage
-        if not any(user.get("username") == ADMIN_USERNAME for user in st.session_state.local_users):
-            st.session_state.local_users.append({
-                "username": ADMIN_USERNAME,
-                "password": ADMIN_PASSWORD,
-                "created_at": datetime.now()
-            })
-
-def calculate_progress(start_date):
-    completed = (date.today() - start_date).days
-    remaining = TOTAL_DAYS - completed
-    progress = min(max(completed, 0) / TOTAL_DAYS, 1) * 100
-    
-    return {
-        "completed": max(completed, 0),
-        "remaining": max(remaining, 0),
-        "progress": progress
-    }
+        for username, password in USERS.items():
+            if not any(user.get("username") == username for user in st.session_state.local_users):
+                st.session_state.local_users.append({
+                    "username": username,
+                    "password": password,
+                    "role": "admin" if username == "admin" else "viewer",
+                    "created_at": datetime.now()
+                })
 
 def check_date_exists(selected_date):
     """Check if a task exists for the given date"""
@@ -305,16 +315,15 @@ def delete_task(task_id):
             if str(task.get("_id", "")) != task_id
         ]
 
-def get_tasks_for_download(start_date):
-    """Get all tasks for download with day numbers"""
+def get_tasks_sorted_by_day(start_date):
+    """Get all tasks sorted by day number"""
     if client:
-        all_tasks = list(tasks_collection.find({}).sort("task_date", 1))
+        all_tasks = list(tasks_collection.find({}))
     else:
-        all_tasks = sorted(st.session_state.local_tasks, 
-                          key=lambda x: x.get("task_date", ""))
+        all_tasks = st.session_state.local_tasks
     
     if not all_tasks:
-        return None
+        return []
     
     # Get start date from settings
     if client:
@@ -324,8 +333,8 @@ def get_tasks_for_download(start_date):
     
     start_date_str = settings.get("start_date") if settings else None
     
-    # Create DataFrame
-    data = []
+    # Calculate day numbers and sort
+    tasks_with_days = []
     for task in all_tasks:
         task_date_str = task.get("task_date")
         task_text = task.get("task")
@@ -335,7 +344,7 @@ def get_tasks_for_download(start_date):
             
         task_date = date.fromisoformat(task_date_str)
         
-        # Calculate day number from start date
+        # Calculate day number
         day_number = None
         if start_date_str:
             try:
@@ -346,23 +355,36 @@ def get_tasks_for_download(start_date):
             except:
                 pass
         
-        # Format date nicely
-        formatted_date = task_date.strftime("%A, %d %B %Y")
-        
+        if day_number:
+            tasks_with_days.append({
+                "day_number": day_number,
+                "date": task_date_str,
+                "formatted_date": task_date.strftime("%A, %d %B %Y"),
+                "task": task_text,
+                "_id": str(task.get("_id", ""))
+            })
+    
+    # Sort by day number
+    tasks_with_days.sort(key=lambda x: x["day_number"])
+    return tasks_with_days
+
+def get_tasks_for_download(start_date):
+    """Get all tasks for download with day numbers"""
+    tasks_with_days = get_tasks_sorted_by_day(start_date)
+    
+    if not tasks_with_days:
+        return None
+    
+    # Create DataFrame
+    data = []
+    for task in tasks_with_days:
         data.append({
-            "Day Number": day_number,
-            "Date": formatted_date,
-            "Task": task_text,
-            "Raw Date": task_date_str
+            "Day Number": task["day_number"],
+            "Date": task["formatted_date"],
+            "Task": task["task"]
         })
     
     df = pd.DataFrame(data)
-    
-    # Sort by raw date
-    if not df.empty:
-        df = df.sort_values("Raw Date")
-        df = df.drop(columns=["Raw Date"])
-    
     return df
 
 def create_csv_download(df):
@@ -397,31 +419,6 @@ def create_excel_download(df):
     except ImportError:
         return None, False
 
-def get_tasks_with_filter(filter_date=None, limit=20):
-    """Get tasks with optional filter and limit"""
-    if client:
-        query = {}
-        if filter_date:
-            query["task_date"] = filter_date.isoformat()
-        
-        tasks = list(tasks_collection.find(query)
-                     .sort("task_date", -1)
-                     .limit(limit))
-    else:
-        tasks = st.session_state.local_tasks
-        
-        # Apply filter
-        if filter_date:
-            tasks = [task for task in tasks 
-                    if task.get("task_date") == filter_date.isoformat()]
-        
-        # Sort and limit
-        tasks = sorted(tasks, 
-                      key=lambda x: x.get("task_date", ""), 
-                      reverse=True)[:limit]
-    
-    return tasks
-
 def get_task_count():
     """Get total task count"""
     if client:
@@ -437,28 +434,12 @@ def get_active_days():
         dates = set(task.get("task_date") for task in st.session_state.local_tasks)
         return len(dates)
 
-def get_date_range():
-    """Get minimum and maximum task dates"""
-    if client:
-        pipeline = [
-            {"$group": {
-                "_id": None,
-                "min_date": {"$min": "$task_date"},
-                "max_date": {"$max": "$task_date"}
-            }}
-        ]
-        result = list(tasks_collection.aggregate(pipeline))
-        if result:
-            return result[0]["min_date"], result[0]["max_date"]
-    else:
-        dates = [task.get("task_date") for task in st.session_state.local_tasks if task.get("task_date")]
-        if dates:
-            return min(dates), max(dates)
-    return None, None
-
 # ---------------- LOGIN ----------------
 def login():
-    st.title("🔐 Admin Login")
+    st.title("🔐 Login")
+    
+    # Initialize users
+    initialize_users()
     
     # MongoDB status indicator
     status_class = "mongodb-connected" if client else "mongodb-disconnected"
@@ -469,9 +450,6 @@ def login():
         <span class="mongodb-status {status_class}">{status_text}</span>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Initialize admin user
-    initialize_admin_user()
     
     # Login form with styling
     with st.container():
@@ -485,19 +463,10 @@ def login():
             with col_btn1:
                 if st.button("🚀 Login", use_container_width=True):
                     # Check credentials
-                    if client:
-                        user = users_collection.find_one({
-                            "username": username,
-                            "password": password
-                        })
-                    else:
-                        user = next((u for u in st.session_state.local_users 
-                                   if u.get("username") == username and 
-                                   u.get("password") == password), None)
-                    
-                    if user:
+                    if username in USERS and USERS[username] == password:
                         st.session_state.logged_in = True
                         st.session_state.username = username
+                        st.session_state.role = "admin" if username == "admin" else "viewer"
                         st.success("Login Successful")
                         st.rerun()
                     else:
@@ -507,19 +476,210 @@ def login():
                 if st.button("🔄 Clear", use_container_width=True):
                     st.rerun()
             
+            # User information
+            st.markdown("---")
+            st.markdown("""
+            **Available Users:**
+            - **admin** (Full access)
+            - **admin2** (Report view only)
+            """)
+            
             st.markdown('</div>', unsafe_allow_html=True)
 
-# ---------------- DASHBOARD ----------------
-def dashboard():
-    # Header with user info and MongoDB status
+# ---------------- REPORT VIEW (for admin2) ----------------
+def report_view():
+    """View for admin2 - shows reports in day order only"""
+    st.title("📊 Internship Reports")
+    
+    # User info with role badge
+    role_class = "role-viewer"
+    role_text = "Report Viewer"
+    
+    col_title, col_user = st.columns([3, 1])
+    with col_title:
+        st.markdown(f"""
+        <div>
+            <h1 style="display: inline;">📊 Internship Reports</h1>
+            <span class="role-badge {role_class}">{role_text}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_user:
+        st.markdown(f"""
+        <div style="text-align: right; padding: 10px;">
+            👤 <strong>{st.session_state.username}</strong><br>
+            <small>{date.today().strftime('%d %b %Y')}</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # MongoDB status
+    status_class = "mongodb-connected" if client else "mongodb-disconnected"
+    status_text = "MongoDB ✓" if client else "MongoDB ✗ (Local)"
+    st.markdown(f'<div style="text-align: center;"><span class="mongodb-status {status_class}">{status_text}</span></div>', 
+               unsafe_allow_html=True)
+    
+    # Get start date for day calculation
+    if client:
+        settings = settings_collection.find_one({})
+    else:
+        settings = st.session_state.local_settings
+    
+    if not settings or "start_date" not in settings:
+        st.warning("⚠️ Start date not set. Please ask admin to set the internship start date.")
+        st.stop()
+    
+    start_date = date.fromisoformat(settings["start_date"])
+    
+    # Get tasks sorted by day
+    tasks_with_days = get_tasks_sorted_by_day(start_date)
+    
+    if not tasks_with_days:
+        st.info("📭 No tasks found yet. Tasks will appear here once added by admin.")
+        # Logout button
+        st.divider()
+        if st.button("🚪 Logout", type="secondary", use_container_width=True):
+            st.session_state.logged_in = False
+            st.session_state.pop('username', None)
+            st.session_state.pop('role', None)
+            st.rerun()
+        return
+    
+    # Statistics
+    col_stat1, col_stat2 = st.columns(2)
+    with col_stat1:
+        st.metric("Total Days with Tasks", len(tasks_with_days))
+    
+    with col_stat2:
+        current_day = (date.today() - start_date).days + 1
+        if current_day > 0:
+            st.metric("Current Day", current_day)
+        else:
+            st.metric("Internship Start", "Not started")
+    
+    # Report Header
+    st.divider()
+    st.markdown(f"""
+    <div class="report-view">
+        <h3>📋 Internship Progress Report</h3>
+        <p>Start Date: {start_date.strftime('%d %B %Y')}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Display tasks grouped by day
+    st.subheader("📅 Daily Tasks (Sorted by Day Number)")
+    
+    # Filter options
+    col_filter1, col_filter2 = st.columns(2)
+    with col_filter1:
+        min_day = min(task["day_number"] for task in tasks_with_days)
+        max_day = max(task["day_number"] for task in tasks_with_days)
+        selected_range = st.slider(
+            "Select Day Range",
+            min_value=min_day,
+            max_value=max_day,
+            value=(min_day, max_day)
+        )
+    
+    with col_filter2:
+        search_term = st.text_input("🔍 Search in tasks", placeholder="Type to search...")
+    
+    # Filter tasks
+    filtered_tasks = [
+        task for task in tasks_with_days 
+        if selected_range[0] <= task["day_number"] <= selected_range[1]
+        and (not search_term or search_term.lower() in task["task"].lower())
+    ]
+    
+    if filtered_tasks:
+        # Group tasks by day for display
+        for task in filtered_tasks:
+            with st.container():
+                st.markdown(f"""
+                <div class="report-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div>
+                            <span style="background: #4CAF50; color: white; padding: 3px 10px; border-radius: 15px; font-weight: bold;">
+                                Day {task['day_number']}
+                            </span>
+                            <span style="margin-left: 10px; color: #666;">
+                                {task['formatted_date']}
+                            </span>
+                        </div>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 3px solid #2196F3;">
+                        {task['task']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("No tasks found matching the selected criteria.")
+    
+    # Download Section
+    st.divider()
+    st.subheader("📥 Download Reports")
+    
+    col_download1, col_download2 = st.columns([2, 1])
+    
+    with col_download1:
+        st.info("Download your internship reports in various formats.")
+    
+    with col_download2:
+        # Create download data
+        df = get_tasks_for_download(start_date)
+        
+        if df is not None and not df.empty:
+            # Create download buttons
+            col_csv, col_excel = st.columns(2)
+            
+            with col_csv:
+                # CSV Download
+                csv_data = create_csv_download(df)
+                st.download_button(
+                    label="📥 CSV Report",
+                    data=csv_data,
+                    file_name=f"internship_report_{date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="csv_report"
+                )
+            
+            with col_excel:
+                # Excel Download (if available)
+                excel_data, excel_available = create_excel_download(df)
+                if excel_available and excel_data:
+                    st.download_button(
+                        label="📊 Excel Report",
+                        data=excel_data,
+                        file_name=f"internship_report_{date.today().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="excel_report"
+                    )
+                else:
+                    # Show info about Excel export
+                    st.info("Excel: Install openpyxl")
+        else:
+            st.warning("No reports available for download")
+    
+    # Logout button
+    st.divider()
+    if st.button("🚪 Logout", type="secondary", use_container_width=True):
+        st.session_state.logged_in = False
+        st.session_state.pop('username', None)
+        st.session_state.pop('role', None)
+        st.rerun()
+
+# ---------------- ADMIN VIEW (for admin) ----------------
+def admin_view():
+    """Full admin view with all features"""
+    # Header with user info and role badge
+    role_class = "role-admin"
+    role_text = "Administrator"
+    
     col_title, col_user = st.columns([3, 1])
     with col_title:
         st.title("📅 Internship Tracker")
-        
-        # MongoDB status
-        status_class = "mongodb-connected" if client else "mongodb-disconnected"
-        status_text = "MongoDB Connected ✓" if client else "MongoDB Offline (Local Storage)"
-        st.markdown(f'<span class="mongodb-status {status_class}">{status_text}</span>', 
+        st.markdown(f'<span class="role-badge {role_class}">{role_text}</span>', 
                    unsafe_allow_html=True)
     
     with col_user:
@@ -529,6 +689,12 @@ def dashboard():
             <small>{date.today().strftime('%d %b %Y')}</small>
         </div>
         """, unsafe_allow_html=True)
+    
+    # MongoDB status
+    status_class = "mongodb-connected" if client else "mongodb-disconnected"
+    status_text = "MongoDB ✓" if client else "MongoDB ✗ (Local)"
+    st.markdown(f'<div style="text-align: center;"><span class="mongodb-status {status_class}">{status_text}</span></div>', 
+               unsafe_allow_html=True)
     
     # Start date configuration
     st.subheader("📅 Settings")
@@ -570,14 +736,16 @@ def dashboard():
         if settings and "start_date" in settings:
             st.info(f"Current start date: {settings['start_date']}")
     
-    # Progress metrics with dynamic CSS
+    # Progress metrics
     st.divider()
     st.subheader("📊 Progress Overview")
     
-    progress_data = calculate_progress(start_date)
+    completed = (date.today() - start_date).days
+    remaining = TOTAL_DAYS - completed
+    progress = min(max(completed, 0) / TOTAL_DAYS, 1) * 100
     
     # Progress bar with animation
-    st.progress(progress_data["progress"] / 100)
+    st.progress(progress / 100)
     
     # Metrics in cards
     col1, col2, col3 = st.columns(3)
@@ -592,7 +760,7 @@ def dashboard():
     with col2:
         st.markdown(f"""
         <div class="metric-card" style="border-left-color:#2196F3;">
-            <h3 style="margin:0; color:#2196F3;">{progress_data['completed']}</h3>
+            <h3 style="margin:0; color:#2196F3;">{max(completed, 0)}</h3>
             <p style="margin:0; color:#666;">Completed Days</p>
         </div>
         """, unsafe_allow_html=True)
@@ -600,7 +768,7 @@ def dashboard():
     with col3:
         st.markdown(f"""
         <div class="metric-card" style="border-left-color:#FF9800;">
-            <h3 style="margin:0; color:#FF9800;">{progress_data['remaining']}</h3>
+            <h3 style="margin:0; color:#FF9800;">{max(remaining, 0)}</h3>
             <p style="margin:0; color:#666;">Remaining Days</p>
         </div>
         """, unsafe_allow_html=True)
@@ -752,9 +920,12 @@ def dashboard():
         else:
             st.warning("No tasks available for download")
     
-    # Task History with Edit Functionality
+    # Task History
     st.divider()
     st.subheader("📚 Task History")
+    
+    # Quick navigation to report view
+    st.info("💡 **Tip:** Use 'admin2' account (password: admin@AHBETA) to view reports in day order.")
     
     # Filter options
     col_filter1, col_filter2, col_filter3 = st.columns(3)
@@ -780,7 +951,26 @@ def dashboard():
             st.rerun()
     
     # Get tasks based on filter
-    tasks = get_tasks_with_filter(st.session_state.filter_date, limit)
+    if client:
+        query = {}
+        if st.session_state.filter_date:
+            query["task_date"] = st.session_state.filter_date.isoformat()
+        
+        tasks = list(tasks_collection.find(query)
+                     .sort("task_date", -1)
+                     .limit(limit))
+    else:
+        tasks = st.session_state.local_tasks
+        
+        # Apply filter
+        if st.session_state.filter_date:
+            tasks = [task for task in tasks 
+                    if task.get("task_date") == st.session_state.filter_date.isoformat()]
+        
+        # Sort and limit
+        tasks = sorted(tasks, 
+                      key=lambda x: x.get("task_date", ""), 
+                      reverse=True)[:limit]
     
     if tasks:
         for task in tasks:
@@ -858,7 +1048,6 @@ def dashboard():
     
     total_tasks = get_task_count()
     active_days = get_active_days()
-    min_date, max_date = get_date_range()
     
     col_stat1, col_stat2, col_stat3 = st.columns(3)
     with col_stat1:
@@ -868,38 +1057,11 @@ def dashboard():
         st.metric("Active Days", active_days)
     
     with col_stat3:
-        if min_date and max_date:
-            first_date = date.fromisoformat(min_date).strftime("%d %b")
-            last_date = date.fromisoformat(max_date).strftime("%d %b %Y")
-            st.metric("Date Range", f"{first_date} - {last_date}")
+        current_day = (date.today() - start_date).days + 1
+        if current_day > 0:
+            st.metric("Current Day", current_day)
         else:
-            st.metric("Date Range", "N/A")
-    
-    # Data Management Section (MongoDB only)
-    if client:
-        st.divider()
-        st.subheader("🗄️ Database Management")
-        
-        col_db1, col_db2 = st.columns(2)
-        
-        with col_db1:
-            if st.button("🗑️ Clear All Tasks", type="secondary", use_container_width=True):
-                if st.checkbox("Confirm delete all tasks"):
-                    tasks_collection.delete_many({})
-                    st.success("All tasks deleted!")
-                    st.rerun()
-        
-        with col_db2:
-            if st.button("📊 Show Database Stats", use_container_width=True):
-                user_count = users_collection.count_documents({})
-                task_count = tasks_collection.count_documents({})
-                
-                st.info(f"""
-                **Database Statistics:**
-                - Users: {user_count}
-                - Tasks: {task_count}
-                - Storage: MongoDB Atlas
-                """)
+            st.metric("Internship Start", "Not started")
     
     # Logout button
     st.divider()
@@ -908,6 +1070,7 @@ def dashboard():
         if st.button("🚪 Logout", type="secondary", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.pop('username', None)
+            st.session_state.pop('role', None)
             st.session_state.pop('selected_date', None)
             st.session_state.pop('filter_date', None)
             # Clear all edit states
@@ -932,9 +1095,14 @@ if __name__ == "__main__":
     # Initialize session state
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
+    if "role" not in st.session_state:
+        st.session_state.role = None
     
-    # Route to login or dashboard
+    # Route based on login status and role
     if not st.session_state.logged_in:
         login()
     else:
-        dashboard()
+        if st.session_state.role == "viewer" or st.session_state.username == "admin2":
+            report_view()  # Show report-only view for admin2
+        else:
+            admin_view()  # Show full admin view for admin
