@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internship Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen active">
+            <div class="login-container">
+                <div class="login-header">
+                    <h1><i class="fas fa-lock"></i> Login</h1>
+                    <div class="db-status">
+                        <span class="status-badge status-local"><i class="fas fa-database"></i> IndexedDB</span>
+                    </div>
+                </div>
+                
+                <div class="login-form">
+                    <div class="form-group">
+                        <label for="username"><i class="fas fa-user"></i> Username</label>
+                        <input type="text" id="username" placeholder="Enter username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password"><i class="fas fa-key"></i> Password</label>
+                        <input type="password" id="password" placeholder="Enter password">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="login-btn" class="btn btn-primary">
+                            <i class="fas fa-rocket"></i> Login
+                        </button>
+                        <button id="clear-btn" class="btn btn-secondary">
+                            <i class="fas fa-redo"></i> Clear
+                        </button>
+                    </div>
+                    
+                    <div class="login-info">
+                        <h3><i class="fas fa-info-circle"></i> Available Users:</h3>
+                        <ul>
+                            <li><strong>admin</strong> (password: admin@asmath) - Full access</li>
+                            <li><strong>admin2</strong> (password: admin@AHBETA) - Report view only</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Dashboard -->
+        <div id="admin-dashboard" class="screen">
+            <div class="dashboard-header">
+                <div class="header-left">
+                    <h1><i class="fas fa-calendar-alt"></i> Internship Tracker</h1>
+                    <div class="user-info">
+                        <span class="role-badge role-admin"><i class="fas fa-user-shield"></i> Administrator</span>
+                        <span class="db-status"><i class="fas fa-database"></i> IndexedDB</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="user-display">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="current-user">admin</span>
+                        <small id="current-date"></small>
+                    </div>
+                    <button id="logout-admin" class="btn btn-secondary btn-small">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-content">
+                <!-- Settings Section -->
+                <section class="card settings-section">
+                    <h2><i class="fas fa-cog"></i> Settings</h2>
+                    <div class="form-group">
+                        <label for="start-date"><i class="fas fa-calendar-day"></i> Internship Start Date</label>
+                        <input type="date" id="start-date">
+                        <small>Set the start date of your internship</small>
+                    </div>
+                    <button id="save-date" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Date
+                    </button>
+                    <div id="date-info" class="info-box"></div>
+                </section>
+
+                <!-- Progress Overview -->
+                <section class="card progress-section">
+                    <h2><i class="fas fa-chart-line"></i> Progress Overview</h2>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">0%</div>
+                    </div>
+                    
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-icon" style="background: #4CAF50;">
+                                <i class="fas fa-calendar"></i>
+                            </div>
+                            <div class="metric-content">
+                                <h3 id="total-days">548</h3>
+                                <p>Total Days</p>
+                            </div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="metric-icon" style="background: #2196F3;">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="metric-content">
+                                <h3 id="completed-days">0</h3>
+                                <p>Completed Days</p>
+                            </div>
+                        </div>
+                        
+                        <div class="metric-card">
+                            <div class="metric-icon" style="background: #FF9800;">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="metric-content">
+                                <h3 id="remaining-days">548</h3>
+                                <p>Remaining Days</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Task Entry -->
+                <section class="card task-entry-section">
+                    <h2><i class="fas fa-tasks"></i> Add/Update Task</h2>
+                    
+                    <div class="date-navigation">
+                        <button id="prev-day" class="btn btn-secondary">
+                            <i class="fas fa-chevron-left"></i> Previous Day
+                        </button>
+                        <button id="today" class="btn btn-secondary">
+                            <i class="fas fa-calendar-day"></i> Today
+                        </button>
+                        <button id="next-day" class="btn btn-secondary">
+                            Next Day <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="task-date"><i class="fas fa-calendar"></i> Select Date for Task</label>
+                        <input type="date" id="task-date">
+                    </div>
+                    
+                    <div id="date-warning" class="warning-box" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Date already has a task!</strong>
+                        Updating will replace the existing task.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="task-description"><i class="fas fa-edit"></i> Task Description</label>
+                        <textarea id="task-description" rows="5" placeholder="Enter your task details here..."></textarea>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="save-task" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Task
+                        </button>
+                        <button id="clear-form" class="btn btn-secondary">
+                            <i class="fas fa-trash"></i> Clear Form
+                        </button>
+                        <button id="view-date" class="btn btn-secondary">
+                            <i class="fas fa-eye"></i> View Date
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Export Section -->
+                <section class="card export-section">
+                    <h2><i class="fas fa-download"></i> Export Data</h2>
+                    <div class="export-content">
+                        <p>Export all tasks with calculated day numbers based on your start date.</p>
+                        <div class="export-buttons">
+                            <button id="export-csv" class="btn btn-success">
+                                <i class="fas fa-file-csv"></i> CSV Report
+                            </button>
+                            <button id="export-json" class="btn btn-success">
+                                <i class="fas fa-file-code"></i> JSON Report
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Task History -->
+                <section class="card task-history-section">
+                    <h2><i class="fas fa-history"></i> Task History</h2>
+                    
+                    <div class="info-box">
+                        <i class="fas fa-lightbulb"></i>
+                        <strong>Tip:</strong> Use 'admin2' account (password: admin@AHBETA) to view reports in day order.
+                    </div>
+                    
+                    <div class="filter-controls">
+                        <div class="form-group">
+                            <label for="filter-date"><i class="fas fa-filter"></i> Filter by Date</label>
+                            <input type="date" id="filter-date">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="task-limit"><i class="fas fa-list-ol"></i> Show tasks</label>
+                            <input type="range" id="task-limit" min="5" max="100" value="20">
+                            <span id="limit-value">20</span>
+                        </div>
+                        
+                        <button id="clear-filter" class="btn btn-secondary">
+                            <i class="fas fa-broom"></i> Clear Filter
+                        </button>
+                    </div>
+                    
+                    <div id="tasks-container" class="tasks-container">
+                        <!-- Tasks will be dynamically added here -->
+                    </div>
+                    
+                    <div id="no-tasks" class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <h3>No tasks found</h3>
+                        <p>Add your first task above!</p>
+                    </div>
+                </section>
+
+                <!-- Statistics -->
+                <section class="card statistics-section">
+                    <h2><i class="fas fa-chart-bar"></i> Statistics</h2>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3 id="total-tasks">0</h3>
+                            <p>Total Tasks</p>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h3 id="active-days">0</h3>
+                            <p>Active Days</p>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h3 id="current-day">0</h3>
+                            <p>Current Day</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Database Management -->
+                <section class="card db-management-section">
+                    <h2><i class="fas fa-database"></i> Database Management</h2>
+                    <div class="db-actions">
+                        <button id="clear-db" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Clear All Tasks
+                        </button>
+                        <button id="db-info" class="btn btn-secondary">
+                            <i class="fas fa-info-circle"></i> Database Info
+                        </button>
+                        <button id="backup-db" class="btn btn-secondary">
+                            <i class="fas fa-download"></i> Backup Database
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Report Dashboard (for admin2) -->
+        <div id="report-dashboard" class="screen">
+            <div class="dashboard-header">
+                <div class="header-left">
+                    <h1><i class="fas fa-chart-bar"></i> Internship Reports</h1>
+                    <div class="user-info">
+                        <span class="role-badge role-viewer"><i class="fas fa-eye"></i> Report Viewer</span>
+                        <span class="db-status"><i class="fas fa-database"></i> IndexedDB</span>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="user-display">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="report-user">admin2</span>
+                        <small id="report-date"></small>
+                    </div>
+                    <button id="logout-report" class="btn btn-secondary btn-small">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-content">
+                <!-- Report Stats -->
+                <section class="card report-stats-section">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h3 id="report-days">0</h3>
+                            <p>Total Days with Tasks</p>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <h3 id="report-current-day">0</h3>
+                            <p>Current Day</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Report Header -->
+                <section class="card report-header-section">
+                    <div class="report-header">
+                        <h3><i class="fas fa-file-alt"></i> Internship Progress Report</h3>
+                        <p id="report-start-date">Start Date: Not set</p>
+                    </div>
+                </section>
+
+                <!-- Daily Tasks -->
+                <section class="card report-tasks-section">
+                    <h2><i class="fas fa-calendar"></i> Daily Tasks (Sorted by Day Number)</h2>
+                    
+                    <div class="filter-controls">
+                        <div class="form-group">
+                            <label for="day-range"><i class="fas fa-sliders-h"></i> Select Day Range</label>
+                            <div class="range-slider">
+                                <input type="range" id="day-range-min" min="1" max="100" value="1">
+                                <input type="range" id="day-range-max" min="1" max="100" value="100">
+                            </div>
+                            <div class="range-values">
+                                <span id="range-min">Day 1</span> to <span id="range-max">Day 100</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="search-tasks"><i class="fas fa-search"></i> Search in tasks</label>
+                            <input type="text" id="search-tasks" placeholder="Type to search...">
+                        </div>
+                    </div>
+                    
+                    <div id="report-tasks-container" class="tasks-container">
+                        <!-- Report tasks will be dynamically added here -->
+                    </div>
+                    
+                    <div id="no-report-tasks" class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <h3>No tasks found yet</h3>
+                        <p>Tasks will appear here once added by admin.</p>
+                    </div>
+                </section>
+
+                <!-- Export Reports -->
+                <section class="card report-export-section">
+                    <h2><i class="fas fa-download"></i> Download Reports</h2>
+                    <div class="export-content">
+                        <p>Download your internship reports in various formats.</p>
+                        <div class="export-buttons">
+                            <button id="export-report-csv" class="btn btn-success">
+                                <i class="fas fa-file-csv"></i> CSV Report
+                            </button>
+                            <button id="export-report-json" class="btn btn-success">
+                                <i class="fas fa-file-code"></i> JSON Report
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Edit Task -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> Edit Task</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="edit-task-date">Date</label>
+                    <input type="date" id="edit-task-date" disabled>
+                </div>
+                <div class="form-group">
+                    <label for="edit-task-description">Task Description</label>
+                    <textarea id="edit-task-description" rows="6" placeholder="Enter task description..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="save-edit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+                <button id="delete-task" class="btn btn-danger">
+                    <i class="fas fa-trash"></i> Delete Task
+                </button>
+                <button id="cancel-edit" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Database Info -->
+    <div id="info-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-info-circle"></i> Database Information</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Database Type:</span>
+                        <span class="info-value">IndexedDB</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Total Users:</span>
+                        <span class="info-value" id="info-users">2</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Total Tasks:</span>
+                        <span class="info-value" id="info-tasks">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Active Days:</span>
+                        <span class="info-value" id="info-active-days">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Storage Status:</span>
+                        <span class="info-value status-good">Operational</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Confirmation</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">Are you sure you want to perform this action?</p>
+            </div>
+            <div class="modal-footer">
+                <button id="confirm-yes" class="btn btn-danger">Yes, proceed</button>
+                <button id="confirm-no" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <div class="toast-content">
+            <i class="toast-icon"></i>
+            <span class="toast-message"></span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
