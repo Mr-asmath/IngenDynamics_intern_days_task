@@ -1,14 +1,62 @@
 import streamlit as st
-import sqlite3
 from datetime import date, timedelta, datetime
 import pandas as pd
 import io
 import csv
+from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
+import gridfs
+from bson import ObjectId
 
 # ---------------- CONFIG ----------------
 TOTAL_DAYS = 548
 ADMIN_USERNAME = "admin"
 ADMIN_PASSWORD = "admin@asmath"
+
+# MongoDB Connection String
+MONGODB_URI = "mongodb+srv://ingenasmath_db_user:asmath@ingen@db@cluster0.egdz6oo.mongodb.net/?appName=Cluster0"
+DATABASE_NAME = "internship_tracker"
+
+# ---------------- MONGODB CONNECTION ----------------
+@st.cache_resource
+def get_mongodb_connection():
+    """Establish MongoDB connection with error handling"""
+    try:
+        # Fix the connection string (remove extra @ before db)
+        uri = MONGODB_URI.replace("asmath@ingen@db", "asmath@ingen%40db")
+        client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+        
+        # Test the connection
+        client.admin.command('ping')
+        st.success("✅ Connected to MongoDB Atlas!")
+        
+        return client
+    except ConnectionFailure as e:
+        st.error(f"❌ MongoDB Connection Failed: {str(e)}")
+        st.info("⚠️ Falling back to local data storage...")
+        return None
+    except Exception as e:
+        st.error(f"❌ Error connecting to MongoDB: {str(e)}")
+        return None
+
+# Initialize MongoDB connection
+client = get_mongodb_connection()
+
+if client:
+    db = client[DATABASE_NAME]
+    users_collection = db["users"]
+    tasks_collection = db["tasks"]
+    settings_collection = db["settings"]
+    fs = gridfs.GridFS(db)
+else:
+    # Fallback: Use Streamlit session state for data storage
+    st.warning("⚠️ Using local session storage (MongoDB not available)")
+    if 'local_users' not in st.session_state:
+        st.session_state.local_users = []
+    if 'local_tasks' not in st.session_state:
+        st.session_state.local_tasks = []
+    if 'local_settings' not in st.session_state:
+        st.session_state.local_settings = {}
 
 # ---------------- DYNAMIC CSS ----------------
 def apply_custom_css():
@@ -92,6 +140,26 @@ def apply_custom_css():
         justify-content: center;
     }
     
+    /* MongoDB status badge */
+    .mongodb-status {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        font-weight: bold;
+        margin-left: 10px;
+    }
+    
+    .mongodb-connected {
+        background-color: #4CAF50;
+        color: white;
+    }
+    
+    .mongodb-disconnected {
+        background-color: #f44336;
+        color: white;
+    }
+    
     /* Responsive design */
     @media (max-width: 768px) {
         .metric-card {
@@ -129,40 +197,26 @@ def apply_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
-# ---------------- DB ----------------
-conn = sqlite3.connect("internship.db", check_same_thread=False)
-c = conn.cursor()
+# ---------------- HELPER FUNCTIONS (MongoDB) ----------------
+def initialize_admin_user():
+    """Initialize admin user in MongoDB"""
+    if client:
+        admin_user = users_collection.find_one({"username": ADMIN_USERNAME})
+        if not admin_user:
+            users_collection.insert_one({
+                "username": ADMIN_USERNAME,
+                "password": ADMIN_PASSWORD,
+                "created_at": datetime.now()
+            })
+    else:
+        # Local storage
+        if not any(user.get("username") == ADMIN_USERNAME for user in st.session_state.local_users):
+            st.session_state.local_users.append({
+                "username": ADMIN_USERNAME,
+                "password": ADMIN_PASSWORD,
+                "created_at": datetime.now()
+            })
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password TEXT
-)
-""")
-
-c.execute("""
-CREATE TABLE IF NOT EXISTS tasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_date TEXT UNIQUE,
-    task TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-
-c.execute("""
-CREATE TABLE IF NOT EXISTS settings (
-    start_date TEXT
-)
-""")
-
-# Insert admin once
-c.execute("SELECT * FROM users WHERE username=?", (ADMIN_USERNAME,))
-if not c.fetchone():
-    c.execute("INSERT INTO users VALUES (?,?)", (ADMIN_USERNAME, ADMIN_PASSWORD))
-    conn.commit()
-
-# ---------------- HELPER FUNCTIONS ----------------
 def calculate_progress(start_date):
     completed = (date.today() - start_date).days
     remaining = TOTAL_DAYS - completed
@@ -174,67 +228,123 @@ def calculate_progress(start_date):
         "progress": progress
     }
 
-def get_all_tasks(limit=50):
-    c.execute("SELECT id, task_date, task FROM tasks ORDER BY task_date DESC LIMIT ?", (limit,))
-    return c.fetchall()
-
 def check_date_exists(selected_date):
-    c.execute("SELECT id, task FROM tasks WHERE task_date = ?", (selected_date.isoformat(),))
-    return c.fetchone()
+    """Check if a task exists for the given date"""
+    if client:
+        return tasks_collection.find_one({"task_date": selected_date.isoformat()})
+    else:
+        # Local storage
+        for task in st.session_state.local_tasks:
+            if task.get("task_date") == selected_date.isoformat():
+                return task
+        return None
 
 def save_or_update_task(selected_date, task_text):
+    """Save or update task in MongoDB"""
     existing_task = check_date_exists(selected_date)
+    
+    task_data = {
+        "task_date": selected_date.isoformat(),
+        "task": task_text,
+        "updated_at": datetime.now()
+    }
     
     if existing_task:
         # Update existing task
-        c.execute("""
-            UPDATE tasks 
-            SET task = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE task_date = ?
-        """, (task_text, selected_date.isoformat()))
+        if client:
+            tasks_collection.update_one(
+                {"_id": existing_task["_id"]},
+                {"$set": task_data}
+            )
+        else:
+            # Update in local storage
+            for i, task in enumerate(st.session_state.local_tasks):
+                if task.get("task_date") == selected_date.isoformat():
+                    st.session_state.local_tasks[i].update(task_data)
+                    break
+        
         action = "updated"
+        was_update = True
     else:
         # Insert new task
-        c.execute(
-            "INSERT OR REPLACE INTO tasks (task_date, task) VALUES (?,?)",
-            (selected_date.isoformat(), task_text)
-        )
+        task_data["created_at"] = datetime.now()
+        
+        if client:
+            tasks_collection.insert_one(task_data)
+        else:
+            st.session_state.local_tasks.append(task_data)
+        
         action = "saved"
+        was_update = False
     
-    conn.commit()
-    return action, existing_task is not None
+    return action, was_update
 
 def update_task(task_id, new_task):
-    c.execute("UPDATE tasks SET task = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", 
-              (new_task, task_id))
-    conn.commit()
+    """Update task by ID"""
+    if client:
+        tasks_collection.update_one(
+            {"_id": ObjectId(task_id)},
+            {"$set": {"task": new_task, "updated_at": datetime.now()}}
+        )
+    else:
+        # Update in local storage
+        for task in st.session_state.local_tasks:
+            if str(task.get("_id", "")) == task_id:
+                task["task"] = new_task
+                task["updated_at"] = datetime.now()
+                break
 
 def delete_task(task_id):
-    c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-    conn.commit()
+    """Delete task by ID"""
+    if client:
+        tasks_collection.delete_one({"_id": ObjectId(task_id)})
+    else:
+        # Delete from local storage
+        st.session_state.local_tasks = [
+            task for task in st.session_state.local_tasks 
+            if str(task.get("_id", "")) != task_id
+        ]
 
 def get_tasks_for_download(start_date):
-    c.execute("SELECT task_date, task FROM tasks ORDER BY task_date")
-    all_tasks = c.fetchall()
+    """Get all tasks for download with day numbers"""
+    if client:
+        all_tasks = list(tasks_collection.find({}).sort("task_date", 1))
+    else:
+        all_tasks = sorted(st.session_state.local_tasks, 
+                          key=lambda x: x.get("task_date", ""))
     
     if not all_tasks:
         return None
     
+    # Get start date from settings
+    if client:
+        settings = settings_collection.find_one({})
+    else:
+        settings = st.session_state.local_settings
+    
+    start_date_str = settings.get("start_date") if settings else None
+    
     # Create DataFrame
     data = []
-    for task_date_str, task_text in all_tasks:
+    for task in all_tasks:
+        task_date_str = task.get("task_date")
+        task_text = task.get("task")
+        
+        if not task_date_str:
+            continue
+            
         task_date = date.fromisoformat(task_date_str)
         
         # Calculate day number from start date
-        c.execute("SELECT start_date FROM settings")
-        row = c.fetchone()
-        if row:
-            start_date = date.fromisoformat(row[0])
-            day_number = (task_date - start_date).days + 1
-            if day_number < 1:
-                day_number = None
-        else:
-            day_number = None
+        day_number = None
+        if start_date_str:
+            try:
+                start_date_obj = date.fromisoformat(start_date_str)
+                day_num = (task_date - start_date_obj).days + 1
+                if day_num > 0:
+                    day_number = day_num
+            except:
+                pass
         
         # Format date nicely
         formatted_date = task_date.strftime("%A, %d %B %Y")
@@ -243,7 +353,7 @@ def get_tasks_for_download(start_date):
             "Day Number": day_number,
             "Date": formatted_date,
             "Task": task_text,
-            "Raw Date": task_date_str  # For sorting
+            "Raw Date": task_date_str
         })
     
     df = pd.DataFrame(data)
@@ -264,7 +374,6 @@ def create_csv_download(df):
 def create_excel_download(df):
     """Create Excel file for download (if openpyxl is available)"""
     try:
-        # Try to import openpyxl
         import openpyxl
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -288,9 +397,81 @@ def create_excel_download(df):
     except ImportError:
         return None, False
 
+def get_tasks_with_filter(filter_date=None, limit=20):
+    """Get tasks with optional filter and limit"""
+    if client:
+        query = {}
+        if filter_date:
+            query["task_date"] = filter_date.isoformat()
+        
+        tasks = list(tasks_collection.find(query)
+                     .sort("task_date", -1)
+                     .limit(limit))
+    else:
+        tasks = st.session_state.local_tasks
+        
+        # Apply filter
+        if filter_date:
+            tasks = [task for task in tasks 
+                    if task.get("task_date") == filter_date.isoformat()]
+        
+        # Sort and limit
+        tasks = sorted(tasks, 
+                      key=lambda x: x.get("task_date", ""), 
+                      reverse=True)[:limit]
+    
+    return tasks
+
+def get_task_count():
+    """Get total task count"""
+    if client:
+        return tasks_collection.count_documents({})
+    else:
+        return len(st.session_state.local_tasks)
+
+def get_active_days():
+    """Get count of distinct task dates"""
+    if client:
+        return len(tasks_collection.distinct("task_date"))
+    else:
+        dates = set(task.get("task_date") for task in st.session_state.local_tasks)
+        return len(dates)
+
+def get_date_range():
+    """Get minimum and maximum task dates"""
+    if client:
+        pipeline = [
+            {"$group": {
+                "_id": None,
+                "min_date": {"$min": "$task_date"},
+                "max_date": {"$max": "$task_date"}
+            }}
+        ]
+        result = list(tasks_collection.aggregate(pipeline))
+        if result:
+            return result[0]["min_date"], result[0]["max_date"]
+    else:
+        dates = [task.get("task_date") for task in st.session_state.local_tasks if task.get("task_date")]
+        if dates:
+            return min(dates), max(dates)
+    return None, None
+
 # ---------------- LOGIN ----------------
 def login():
     st.title("🔐 Admin Login")
+    
+    # MongoDB status indicator
+    status_class = "mongodb-connected" if client else "mongodb-disconnected"
+    status_text = "MongoDB ✓" if client else "MongoDB ✗ (Local)"
+    
+    st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 20px;">
+        <span class="mongodb-status {status_class}">{status_text}</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Initialize admin user
+    initialize_admin_user()
     
     # Login form with styling
     with st.container():
@@ -303,9 +484,18 @@ def login():
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 if st.button("🚀 Login", use_container_width=True):
-                    c.execute("SELECT * FROM users WHERE username=? AND password=?", 
-                             (username, password))
-                    if c.fetchone():
+                    # Check credentials
+                    if client:
+                        user = users_collection.find_one({
+                            "username": username,
+                            "password": password
+                        })
+                    else:
+                        user = next((u for u in st.session_state.local_users 
+                                   if u.get("username") == username and 
+                                   u.get("password") == password), None)
+                    
+                    if user:
                         st.session_state.logged_in = True
                         st.session_state.username = username
                         st.success("Login Successful")
@@ -321,10 +511,17 @@ def login():
 
 # ---------------- DASHBOARD ----------------
 def dashboard():
-    # Header with user info
+    # Header with user info and MongoDB status
     col_title, col_user = st.columns([3, 1])
     with col_title:
         st.title("📅 Internship Tracker")
+        
+        # MongoDB status
+        status_class = "mongodb-connected" if client else "mongodb-disconnected"
+        status_text = "MongoDB Connected ✓" if client else "MongoDB Offline (Local Storage)"
+        st.markdown(f'<span class="mongodb-status {status_class}">{status_text}</span>', 
+                   unsafe_allow_html=True)
+    
     with col_user:
         st.markdown(f"""
         <div style="text-align: right; padding: 10px;">
@@ -335,27 +532,43 @@ def dashboard():
     
     # Start date configuration
     st.subheader("📅 Settings")
-    c.execute("SELECT start_date FROM settings")
-    row = c.fetchone()
+    
+    # Get current settings
+    if client:
+        settings = settings_collection.find_one({})
+    else:
+        settings = st.session_state.local_settings
+    
+    start_date_value = date.today()
+    if settings and "start_date" in settings:
+        start_date_value = date.fromisoformat(settings["start_date"])
     
     start_date = st.date_input(
         "🎯 Internship Start Date",
-        value=date.fromisoformat(row[0]) if row else date.today(),
+        value=start_date_value,
         help="Set the start date of your internship"
     )
     
     col_save, col_info = st.columns([1, 3])
     with col_save:
         if st.button("💾 Save Date", use_container_width=True, key="save_date"):
-            c.execute("DELETE FROM settings")
-            c.execute("INSERT INTO settings VALUES (?)", (start_date.isoformat(),))
-            conn.commit()
+            if client:
+                # Update in MongoDB
+                settings_collection.update_one(
+                    {},
+                    {"$set": {"start_date": start_date.isoformat()}},
+                    upsert=True
+                )
+            else:
+                # Update in local storage
+                st.session_state.local_settings["start_date"] = start_date.isoformat()
+            
             st.success("Start date saved successfully!")
             st.rerun()
     
     with col_info:
-        if row:
-            st.info(f"Current start date: {row[0]}")
+        if settings and "start_date" in settings:
+            st.info(f"Current start date: {settings['start_date']}")
     
     # Progress metrics with dynamic CSS
     st.divider()
@@ -445,7 +658,7 @@ def dashboard():
         """, unsafe_allow_html=True)
     
     # Pre-fill task if date exists
-    default_task = existing_task[1] if existing_task else ""
+    default_task = existing_task.get("task") if existing_task else ""
     task = st.text_area(
         "Task Description", 
         value=default_task,
@@ -497,8 +710,7 @@ def dashboard():
     
     with col_download2:
         # Check if we have tasks to download
-        c.execute("SELECT COUNT(*) FROM tasks")
-        task_count = c.fetchone()[0]
+        task_count = get_task_count()
         
         if task_count > 0:
             # Get data for download
@@ -533,8 +745,8 @@ def dashboard():
                             key="excel_download"
                         )
                     else:
-                        # Show disabled button or info
-                        st.info("Excel export requires openpyxl package")
+                        # Show info about Excel export
+                        st.info("Excel: Install openpyxl")
             else:
                 st.warning("No tasks to download")
         else:
@@ -568,36 +780,29 @@ def dashboard():
             st.rerun()
     
     # Get tasks based on filter
-    if st.session_state.filter_date:
-        c.execute("""
-            SELECT id, task_date, task 
-            FROM tasks 
-            WHERE task_date = ? 
-            ORDER BY id DESC
-        """, (st.session_state.filter_date.isoformat(),))
-    else:
-        c.execute("""
-            SELECT id, task_date, task 
-            FROM tasks 
-            ORDER BY task_date DESC 
-            LIMIT ?
-        """, (limit,))
-    
-    tasks = c.fetchall()
+    tasks = get_tasks_with_filter(st.session_state.filter_date, limit)
     
     if tasks:
-        for task_id, task_date_str, task_text in tasks:
+        for task in tasks:
+            task_id = str(task.get("_id", ""))
+            task_date_str = task.get("task_date", "")
+            task_text = task.get("task", "")
+            
+            if not task_date_str:
+                continue
+                
             task_date_display = date.fromisoformat(task_date_str)
             
             # Calculate day number if start date exists
             day_number = ""
-            c.execute("SELECT start_date FROM settings")
-            row = c.fetchone()
-            if row:
-                start_date_for_calc = date.fromisoformat(row[0])
-                day_num = (task_date_display - start_date_for_calc).days + 1
-                if day_num > 0:
-                    day_number = f"Day {day_num} • "
+            if settings and "start_date" in settings:
+                try:
+                    start_date_for_calc = date.fromisoformat(settings["start_date"])
+                    day_num = (task_date_display - start_date_for_calc).days + 1
+                    if day_num > 0:
+                        day_number = f"Day {day_num} • "
+                except:
+                    pass
             
             # Display each task in a card
             with st.container():
@@ -651,14 +856,9 @@ def dashboard():
     st.divider()
     st.subheader("📈 Statistics")
     
-    c.execute("SELECT COUNT(*) FROM tasks")
-    total_tasks = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(DISTINCT task_date) FROM tasks")
-    active_days = c.fetchone()[0]
-    
-    c.execute("SELECT MIN(task_date), MAX(task_date) FROM tasks")
-    date_range = c.fetchone()
+    total_tasks = get_task_count()
+    active_days = get_active_days()
+    min_date, max_date = get_date_range()
     
     col_stat1, col_stat2, col_stat3 = st.columns(3)
     with col_stat1:
@@ -668,12 +868,38 @@ def dashboard():
         st.metric("Active Days", active_days)
     
     with col_stat3:
-        if date_range and date_range[0] and date_range[1]:
-            first_date = date.fromisoformat(date_range[0]).strftime("%d %b")
-            last_date = date.fromisoformat(date_range[1]).strftime("%d %b %Y")
+        if min_date and max_date:
+            first_date = date.fromisoformat(min_date).strftime("%d %b")
+            last_date = date.fromisoformat(max_date).strftime("%d %b %Y")
             st.metric("Date Range", f"{first_date} - {last_date}")
         else:
             st.metric("Date Range", "N/A")
+    
+    # Data Management Section (MongoDB only)
+    if client:
+        st.divider()
+        st.subheader("🗄️ Database Management")
+        
+        col_db1, col_db2 = st.columns(2)
+        
+        with col_db1:
+            if st.button("🗑️ Clear All Tasks", type="secondary", use_container_width=True):
+                if st.checkbox("Confirm delete all tasks"):
+                    tasks_collection.delete_many({})
+                    st.success("All tasks deleted!")
+                    st.rerun()
+        
+        with col_db2:
+            if st.button("📊 Show Database Stats", use_container_width=True):
+                user_count = users_collection.count_documents({})
+                task_count = tasks_collection.count_documents({})
+                
+                st.info(f"""
+                **Database Statistics:**
+                - Users: {user_count}
+                - Tasks: {task_count}
+                - Storage: MongoDB Atlas
+                """)
     
     # Logout button
     st.divider()
@@ -706,25 +932,6 @@ if __name__ == "__main__":
     # Initialize session state
     if "logged_in" not in st.session_state:
         st.session_state.logged_in = False
-    
-    # Check for URL parameters
-    query_params = st.query_params
-    
-    # Handle delete action
-    if "delete" in query_params:
-        task_id = query_params["delete"]
-        delete_task(int(task_id))
-        st.query_params.clear()
-        st.rerun()
-    
-    # Handle date selection from URL
-    if "date" in query_params:
-        try:
-            selected_date = date.fromisoformat(query_params["date"])
-            st.session_state.selected_date = selected_date
-            st.query_params.clear()
-        except ValueError:
-            pass
     
     # Route to login or dashboard
     if not st.session_state.logged_in:
